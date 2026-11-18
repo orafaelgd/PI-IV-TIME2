@@ -17,6 +17,8 @@ import controller.PerfilUsuarioHandler;
 import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
+import model.RepositorioVencimentos;
+import server.ServidorSocket;
 
 public class Main {
 
@@ -98,133 +100,40 @@ public class Main {
                 "/api/login", loginHandler
             );
 
-            servidor.createContext(
-                "/api/logout", loginHandler
-            );
+                        // MOVIMENTAÇÕES
+                        servidor.createContext(
+                                        "/api/movimentacoes",
+                                        new MovimentacoesHandler(
+                                                        cliente,
+                                                        lotes,
+                                                        movimentacoes));
 
-            servidor.createContext(
-                "/api/usuario", loginHandler
-            );
+                        // ENCERRAMENTO SEGURO
+                        Runtime.getRuntime().addShutdownHook(
+                                        new Thread(() -> {
+                                                servidor.stop(0);
+                                                cliente.close();
+                                        }));
 
-            // PERFIL DO USUÁRIO
+                        // INICIALIZAÇÃO
+                        servidor.start();
 
-            servidor.createContext(
-                "/api/perfil",
-                new PerfilUsuarioHandler(usuarios, sessoes)
-            );
+                        RepositorioVencimentos repositorio = new RepositorioVencimentos(lotes, produtos);
 
-            // DASHBOARD
+                        Thread threadServidor = new Thread(
+                                        new ServidorSocket(repositorio));
 
-            servidor.createContext(
-                "/api/dashboard/resumo",
-                new DashboardHandler(produtos, lotes)
-            );
+                        threadServidor.start();
 
-            // RELATÓRIOS
+                        System.out.println(
+                                        "Servidor iniciado em http://localhost:8080/");
 
-            RelatoriosHandler relatoriosHandler =
-                new RelatoriosHandler(
-                    produtos,
-                    lotes,
-                    movimentacoes
-                );
+                        System.out.println(
+                                        "MongoDB conectado com sucesso!");
 
-            servidor.createContext(
-                "/api/relatorios/",
-                relatoriosHandler
-            );
-
-            // PRODUTOS E CATEGORIAS
-
-            ProdutosHandler produtosHandler =
-                new ProdutosHandler(
-                    produtos,
-                    categorias,
-                    lotes,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/produtos",
-                produtosHandler
-            );
-
-            servidor.createContext(
-                "/api/categorias",
-                produtosHandler
-            );
-
-            // LOTES
-
-            // Envia as coleções para validar a sessão
-            LotesHandler lotesHandler = new LotesHandler(
-                lotes,
-                produtos,
-                movimentacoes,
-                usuarios,
-                sessoes
-            );
-
-            servidor.createContext(
-                "/api/lotes",
-                lotesHandler
-            );
-
-            // PRÓXIMOS VENCIMENTOS
-
-            servidor.createContext(
-                "/api/lotes/proximos-vencimento",
-                new ProximosVencimentoHandler(
-                    lotes,
-                    produtos
-                )
-            );
-
-            // MOVIMENTAÇÕES
-
-            servidor.createContext(
-                "/api/movimentacoes",
-                new MovimentacoesHandler(
-                    cliente,
-                    lotes,
-                    movimentacoes
-                )
-            );
-
-            // HISTÓRICO DE DESPERDÍCIO
-
-            servidor.createContext(
-                "/api/saidas",
-                new controller.HistoricoDespHandler(banco)
-            );
-
-            // ENCERRAMENTO SEGURO
-
-            Runtime.getRuntime().addShutdownHook(
-                new Thread(() -> {
-                    servidor.stop(0);
-                    cliente.close();
-                })
-            );
-
-            // INICIALIZAÇÃO DO SERVIDOR
-
-            servidor.start();
-
-            System.out.println(
-                "Servidor iniciado em http://localhost:8080/"
-            );
-
-            System.out.println(
-                "MongoDB conectado com sucesso!"
-            );
-
-        } catch (Exception erro) {
-
-            cliente.close();
-            throw erro;
+                } catch (Exception erro) {
+                        cliente.close();
+                        throw erro;
+                }
         }
-    }
 }
