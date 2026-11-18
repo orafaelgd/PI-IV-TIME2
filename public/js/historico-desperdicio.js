@@ -5,28 +5,62 @@ document.addEventListener("DOMContentLoaded", () => {
     const tabela = document.getElementById("historico-desperdicio");
     const token = sessionStorage.getItem("token");
 
+    if (!tabela) {
+        console.error("Tabela do histórico não encontrada.");
+        return;
+    }
+
+    function redirecionarLogin() {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+        window.location.replace("login-usuario.html");
+    }
+
     if (!token) {
-        window.location.href = "login-usuario.html";
+        redirecionarLogin();
         return;
     }
 
     function formatarData(data) {
         if (!data) return "-";
 
-        const valor = String(data).substring(0, 10);
-        const partes = valor.split("-");
+        if (/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+            const [ano, mes, dia] = data.split("-");
+            return `${dia}/${mes}/${ano}`;
+        }
 
-        if (partes.length !== 3) return valor;
+        const dataConvertida = new Date(data);
 
-        return `${partes[2]}/${partes[1]}/${partes[0]}`;
+        if (Number.isNaN(dataConvertida.getTime())) {
+            return "-";
+        }
+
+        return new Intl.DateTimeFormat("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric"
+        }).format(dataConvertida);
     }
 
     function formatarQuantidade(quantidade, unidade) {
+        if (
+            quantidade === null ||
+            quantidade === undefined ||
+            quantidade === ""
+        ) {
+            return "-";
+        }
+
         const numero = Number(quantidade);
 
         if (!Number.isFinite(numero)) return "-";
 
-        return `${numero.toLocaleString("pt-BR")} ${unidade || ""}`;
+        const valor = numero.toLocaleString("pt-BR", {
+            maximumFractionDigits: 6
+        });
+
+        return `${valor} ${unidade || ""}`.trim();
     }
 
     function criarCelula(linha, texto, centralizar = false) {
@@ -49,7 +83,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         celula.colSpan = 5;
         celula.textContent = texto;
-        celula.className = "px-6 py-6 text-center text-text-secondary";
+        celula.className =
+            "px-6 py-6 text-center text-text-secondary";
 
         linha.appendChild(celula);
         tabela.appendChild(linha);
@@ -59,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.replaceChildren();
 
         if (!registros.length) {
-            mostrarMensagem("Nenhuma saída encontrada.");
+            mostrarMensagem("Nenhum desperdício encontrado.");
             return;
         }
 
@@ -70,12 +105,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 text-[14px]
                 font-semibold
                 text-text
-                ${indice % 2 === 0 ? "bg-[#E4E5E5]" : "bg-[#F1F1F1]"}
+                ${indice % 2 === 0
+                    ? "bg-[#E4E5E5]"
+                    : "bg-[#F1F1F1]"}
             `;
 
-            const responsavel = registro.origem === "AUTOMATICA"
-                ? "Sistema"
-                : registro.responsavelNome || "Não informado";
+            const responsavel =
+                registro.origem === "AUTOMATICA"
+                    ? "Sistema"
+                    : registro.responsavelNome || "Não informado";
 
             criarCelula(
                 linha,
@@ -117,14 +155,15 @@ document.addEventListener("DOMContentLoaded", () => {
         mostrarMensagem("Carregando histórico...");
 
         try {
-            let registros = [];
+            const registros = [];
             let pagina = 1;
             let total = 0;
 
             do {
                 const parametros = new URLSearchParams({
-                    pagina: pagina,
-                    limite: 100
+                    pagina: String(pagina),
+                    limite: "100",
+                    somenteDesperdicio: "true"
                 });
 
                 const resposta = await fetch(
@@ -132,37 +171,74 @@ document.addEventListener("DOMContentLoaded", () => {
                     {
                         method: "GET",
                         headers: {
-                            "Authorization": `Bearer ${token}`
-                        }
+                            Authorization: `Bearer ${token}`,
+                            Accept: "application/json"
+                        },
+                        cache: "no-store"
                     }
                 );
 
                 if (resposta.status === 401) {
-                    sessionStorage.removeItem("token");
-                    sessionStorage.removeItem("usuario");
-                    window.location.href = "login-usuario.html";
+                    redirecionarLogin();
+                    return;
+                }
+
+                if (resposta.status === 403) {
+                    mostrarMensagem(
+                        "Você não tem permissão para acessar o histórico."
+                    );
                     return;
                 }
 
                 if (!resposta.ok) {
-                    throw new Error("Erro ao consultar o histórico.");
+                    throw new Error(
+                        `Erro HTTP ${resposta.status}`
+                    );
                 }
 
                 const dados = await resposta.json();
 
-                registros.push(...(dados.itens || []));
-                total = dados.total || 0;
+                if (
+                    !Array.isArray(dados.itens) ||
+                    !Number.isFinite(Number(dados.total))
+                ) {
+                    throw new Error(
+                        "Formato de resposta inválido."
+                    );
+                }
+
+                const itens = dados.itens;
+                total = Number(dados.total);
+
+                registros.push(...itens);
+
+                if (
+                    itens.length === 0 &&
+                    registros.length < total
+                ) {
+                    throw new Error(
+                        "Paginação inconsistente no servidor."
+                    );
+                }
+
                 pagina++;
 
-            } while (registros.length < total && pagina <= 100);
+            } while (registros.length < total);
 
-            preencherTabela(registros);
+            const desperdicios = registros.filter(
+                registro => registro.desperdicio === true
+            );
+
+            preencherTabela(desperdicios);
 
         } catch (erro) {
-            console.error("Erro ao carregar histórico:", erro);
+            console.error(
+                "Erro ao carregar histórico:",
+                erro
+            );
 
             mostrarMensagem(
-                "Não foi possível carregar o histórico."
+                "Não foi possível carregar o histórico. Verifique a conexão com o servidor."
             );
         }
     }
