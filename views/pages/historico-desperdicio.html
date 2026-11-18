@@ -3,169 +3,134 @@
 <html lang="pt-BR">
 
 <head>
-  <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+    <meta charset="UTF-8">
 
-  <title>Histórico de Desperdício | PsicomManager</title>
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
 
-  <link
-    rel="stylesheet"
-    href="../../public/css/style.css"
-  >
+    <title>Histórico de Desperdício | Gestão de Desperdício</title>
+
+    <!-- ESTILIZAÇÃO -->
+    <link
+        rel="stylesheet"
+        href="../../public/css/style.css"
+    >
 </head>
 
 <body class="flex min-h-screen flex-col bg-background md:flex-row">
 
-  <!-- Menu lateral -->
-  <aside
-    id="aside-placeholder"
-    class="w-full shrink-0 md:w-[180px]"
-  ></aside>
+    <!-- MENU LATERAL -->
+    <aside id="aside-placeholder"
+        class="w-full shrink-0 md:w-[180px]">
+    </aside>
 
-  <div class="flex min-w-0 flex-1 flex-col">
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="flex min-w-0 flex-1 flex-col">
 
-    <!-- Cabeçalho compartilhado -->
-    <div id="header-placeholder"></div>
+        <!-- CABEÇALHO -->
+        <div id="header-placeholder"></div>
 
-    <main class="flex-1">
+        <main class="flex-1">
 
-      <div class="w-full px-8 py-8">
+            <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
 
-        <!-- Breadcrumb -->
-        <div class="mb-10 text-[14px] text-text-secondary">
+                <!-- CAMINHO DA PÁGINA -->
+                <div class="mb-8 flex min-h-[35px] items-center text-base">
 
-          <span class="text-gray-500">
-            Desperdício
-          </span>
+                    <span class="text-text-secondary">
+                        Desperdício
+                    </span>
 
-          <span class="mx-1">
-            /
-          </span>
+                    <span class="ml-1 font-semibold text-text">
+                        / Histórico
+                    </span>
+                </div>
 
-          <span class="font-medium text-text">
-            Histórico
-          </span>
+                <!-- CARD DO HISTÓRICO -->
+                <section
+                    class="w-full rounded-md bg-white px-6 py-5">
 
-        </div>
+                    <!-- TÍTULO -->
+                    <div class="mb-10 flex items-center justify-between">
 
-        <!-- Card principal -->
-        <section
-          class="
-            w-full
-            overflow-hidden
-            rounded-[8px]
-            bg-[#F1F1F1]
-            shadow-sm
-          "
-        >
+                        <h1 class="text-base font-semibold text-text">
+                            Histórico de desperdício
+                        </h1>
+                    </div>
 
-          <!-- Título do card -->
-          <div class="px-6 py-4">
+                    <!-- TABELA DO HISTÓRICO -->
+                    <div class="w-full overflow-x-auto">
 
-            <h1
-              class="
-                text-[18px]
-                font-medium
-                text-text
-              "
-            >
-              Histórico
-            </h1>
+                        <table
+                            class="w-full min-w-[850px] border-collapse text-left text-xs text-text">
 
-          </div>
+                            <!-- CABEÇALHO DA TABELA -->
+                            <thead>
 
-          <!-- Tabela do histórico -->
-          <div class="overflow-x-auto">
+                                <tr
+                                    class="border-b border-gray-400 text-text-secondary">
 
-            <table
-              class="
-                w-full
-                min-w-[760px]
-                border-collapse
-                text-left
-              "
-            >
+                                    <th
+                                        class="px-3 py-2 font-medium">
+                                        Produto
+                                    </th>
 
-              <!-- Cabeçalho da tabela -->
-              <thead>
+                                    <th
+                                        class="px-3 py-2 text-center font-medium">
+                                        Qtd. Desperdiçada
+                                    </th>
 
-                <tr
-                  class="
-                    border-b
-                    border-[#5F6874]
-                    text-[12px]
-                    font-normal
-                    text-text
-                  "
-                >
+                                    <th
+                                        class="px-3 py-2 text-center font-medium">
+                                        Motivo
+                                    </th>
 
-                  <th class="px-6 py-2 font-normal">
-                    Produto
-                  </th>
+                                    <th
+                                        class="px-3 py-2 text-center font-medium">
+                                        Data
+                                    </th>
 
-                  <th class="px-6 py-2 text-center font-normal">
-                    Qtd. Desperdiçada
-                  </th>
+                                    <th
+                                        class="px-3 py-2 text-center font-medium">
+                                        Registrado por
+                                    </th>
+                                </tr>
+                            </thead>
 
-                  <th class="px-6 py-2 text-center font-normal">
-                    Motivo
-                  </th>
+                            <!-- REGISTROS DO MONGODB -->
+                            <tbody id="historico-desperdicio">
 
-                  <th class="px-6 py-2 text-center font-normal">
-                    Data
-                  </th>
+                                <tr>
+                                    <td
+                                        colspan="5"
+                                        class="px-3 py-6 text-center text-text-secondary">
+                                        Carregando histórico...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
 
-                  <th class="px-6 py-2 text-center font-normal">
-                    Registrado por
-                  </th>
+                    <!-- MENSAGENS DE ERRO -->
+                    <p
+                        id="mensagemErroHistorico"
+                        class="mt-4 hidden text-xs text-red-600"
+                        role="alert">
+                    </p>
 
-                </tr>
+                </section>
+            </div>
+        </main>
 
-              </thead>
+        <!-- RODAPÉ -->
+        <div id="footer-placeholder"></div>
+    </div>
 
-              <!--
-                Os registros serão inseridos automaticamente
-                pelo JavaScript historico-desperdicio.js.
+    <!-- COMPONENTES COMPARTILHADOS -->
+    <script src="../../public/js/load-partials.js"></script>
 
-                Nenhum registro fictício deve ficar aqui.
-              -->
-              <tbody id="historico-desperdicio">
-
-                <tr>
-                  <td
-                    colspan="5"
-                    class="px-6 py-6 text-center text-text-secondary"
-                  >
-                    Carregando histórico...
-                  </td>
-                </tr>
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-        </section>
-
-      </div>
-
-    </main>
-
-    <!-- Rodapé compartilhado -->
-    <div id="footer-placeholder"></div>
-
-  </div>
-
-  <!-- Componentes compartilhados -->
-  <script src="../../public/js/load-partials.js"></script>
-
-  <!-- Integração com o backend do Histórico de Desperdício -->
-  <script src="../../public/js/historico-desperdicio.js"></script>
+    <!-- HISTÓRICO DE DESPERDÍCIO -->
+    <script src="../../public/js/historico-desperdicio.js"></script>
 
 </body>
-
 </html>
