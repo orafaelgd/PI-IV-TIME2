@@ -1,49 +1,358 @@
 
+// REGISTRAR SAÍDA
+// AUTENTICAÇÃO, VALIDAÇÕES E INTEGRAÇÃO COM MONGODB
+
 document.addEventListener("DOMContentLoaded", () => {
-    const API = "http://localhost:8080";
 
-    // Elementos do formulario
-    const formulario = document.getElementById("form-registrar-saida");
-    const produtoSelect = document.getElementById("produto");
-    const loteSelect = document.getElementById("lote");
-    const quantidadeDisponivel = document.getElementById("quantidade-disponivel");
-    const quantidadeSaida = document.getElementById("quantidade-saida");
-    const dataSaida = document.getElementById("data-saida");
-    const motivo = document.getElementById("motivo");
-    const observacao = document.getElementById("observacao");
+    // CONFIGURAÇÕES
 
-    const botaoEnviar = formulario.querySelector('[type="submit"]');
-    const botaoCancelar = formulario.querySelector('button[type="button"]');
+    const API = "http://localhost:8080/api";
+    const PAGINA_LOGIN = "login-usuario.html";
+
+    const MOTIVOS_VALIDOS = [
+        "consumido",
+        "vencimento",
+        "contaminado",
+        "danificado",
+        "outro"
+    ];
+
+    // ELEMENTOS DO FORMULÁRIO
+
+    const formulario = document.getElementById(
+        "form-registrar-saida"
+    );
+
+    if (!formulario) {
+        console.error("Formulário de saída não encontrado.");
+        return;
+    }
+
+    const produtoSelect =
+        document.getElementById("produto");
+
+    const loteSelect =
+        document.getElementById("lote");
+
+    const quantidadeDisponivel =
+        document.getElementById("quantidade-disponivel");
+
+    const quantidadeSaida =
+        document.getElementById("quantidade-saida");
+
+    const dataSaida =
+        document.getElementById("data-saida");
+
+    const motivo =
+        document.getElementById("motivo");
+
+    const observacao =
+        document.getElementById("observacao");
+
+    const botaoEnviar =
+        document.getElementById("botaoRegistrar");
+
+    const botaoCancelar =
+        document.getElementById("botaoCancelar");
+
+    const mensagem =
+        document.getElementById("mensagemFormulario");
+
+    // DADOS CARREGADOS
 
     let produtos = [];
     let lotes = [];
 
-    // Guarda os dados de uma operacao ainda nao confirmada.
-    // A mesma operacao sempre reutiliza a mesma chave.
-    let operacaoPendente = null;
+    // CONTROLE DO FORMULÁRIO
+
+    let carregandoDados = false;
     let enviando = false;
 
-    // Retorna a data atual no horario de Sao Paulo
-    function dataAtual() {
-        const partes = new Intl.DateTimeFormat("en-CA", {
-            timeZone: "America/Sao_Paulo",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit"
-        }).formatToParts(new Date());
+    // PROTEÇÃO CONTRA REGISTRO DUPLICADO
 
-        const valores = Object.fromEntries(
-            partes.map(parte => [parte.type, parte.value])
+    let operacaoPendente = null;
+
+    // VERIFICAR ELEMENTOS OBRIGATÓRIOS
+
+    if (
+        !produtoSelect ||
+        !loteSelect ||
+        !quantidadeDisponivel ||
+        !quantidadeSaida ||
+        !dataSaida ||
+        !motivo ||
+        !observacao ||
+        !botaoEnviar ||
+        !botaoCancelar ||
+        !mensagem
+    ) {
+
+        console.error(
+            "Campos do formulário de saída não encontrados."
         );
 
-        return `${valores.year}-${valores.month}-${valores.day}`;
+        return;
     }
 
-    dataSaida.value = dataAtual();
+    // AUTENTICAÇÃO
 
-    // Cria uma opcao para os campos select
+    function obterToken() {
+
+        return sessionStorage.getItem("token");
+    }
+
+    // ENCERRAR SESSÃO
+
+    function encerrarAcesso() {
+
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+
+        window.location.replace(PAGINA_LOGIN);
+    }
+
+    // VERIFICAR SESSÃO
+
+    function verificarSessao() {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+
+            encerrarAcesso();
+            return false;
+        }
+
+        return true;
+    }
+
+    // REQUISIÇÕES AUTENTICADAS
+
+    async function requisicaoAutenticada(
+        url,
+        opcoes = {}
+    ) {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sessão não encontrada."
+            );
+        }
+
+        // ENVIAR TOKEN PARA O SESSAOSERVICE
+
+        const headers = new Headers(
+            opcoes.headers || {}
+        );
+
+        headers.set(
+            "Authorization",
+            `Bearer ${token}`
+        );
+
+        const resposta = await fetch(url, {
+
+            ...opcoes,
+
+            headers,
+
+            cache: "no-store"
+        });
+
+        // SESSÃO INVÁLIDA OU EXPIRADA
+
+        if (resposta.status === 401) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sua sessão expirou. Faça login novamente."
+            );
+        }
+
+        // ACESSO NEGADO
+
+        if (resposta.status === 403) {
+
+            throw new Error(
+                "Você não tem permissão para realizar esta operação."
+            );
+        }
+
+        return resposta;
+    }
+
+    // LER RESPOSTA DO BACKEND
+
+    async function lerResposta(resposta) {
+
+        const texto = await resposta.text();
+
+        let dados = {};
+
+        if (texto) {
+
+            try {
+
+                dados = JSON.parse(texto);
+
+            } catch {
+
+                dados = {
+                    mensagem: texto
+                };
+            }
+        }
+
+        if (!resposta.ok) {
+
+            const erro = new Error(
+                dados.mensagem ||
+                dados.erro ||
+                `Erro HTTP ${resposta.status}`
+            );
+
+            erro.status = resposta.status;
+
+            throw erro;
+        }
+
+        return dados;
+    }
+
+    // MENSAGENS DO FORMULÁRIO
+
+    function mostrarErro(texto) {
+
+        mensagem.textContent = texto;
+
+        mensagem.classList.remove("hidden");
+    }
+
+    function limparErro() {
+
+        mensagem.textContent = "";
+
+        mensagem.classList.add("hidden");
+    }
+
+    // DATA ATUAL EM SÃO PAULO
+
+    function dataAtual() {
+
+        const partes = new Intl.DateTimeFormat(
+            "en-US",
+            {
+                timeZone: "America/Sao_Paulo",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+            }
+        ).formatToParts(new Date());
+
+        const valores = Object.fromEntries(
+            partes.map((parte) => [
+                parte.type,
+                parte.value
+            ])
+        );
+
+        return (
+            `${valores.year}-` +
+            `${valores.month}-` +
+            `${valores.day}`
+        );
+    }
+
+    // CONFIGURAR DATA
+
+    function configurarData() {
+
+        const hoje = dataAtual();
+
+        dataSaida.max = hoje;
+        dataSaida.value = hoje;
+    }
+
+    // CONVERTER DECIMAL128 DO MONGODB
+
+    function converterNumero(valor) {
+
+        if (
+            valor &&
+            typeof valor === "object" &&
+            "$numberDecimal" in valor
+        ) {
+
+            valor = valor.$numberDecimal;
+        }
+
+        return Number(valor);
+    }
+
+    // OBTER IDENTIFICADOR
+
+    function obterId(registro) {
+
+        if (!registro) {
+            return "";
+        }
+
+        const id =
+            registro.id ??
+            registro._id ??
+            registro.produtoId ??
+            registro.itemId ??
+            "";
+
+        if (typeof id === "string") {
+            return id;
+        }
+
+        if (id && typeof id === "object") {
+
+            return id.$oid ??
+                id.oid ??
+                "";
+        }
+
+        return "";
+    }
+
+    // OBTER NOME DO PRODUTO
+
+    function obterNomeProduto(produto) {
+
+        return String(
+            produto.nomeProduto ??
+            produto.nome ??
+            produto.titulo ??
+            ""
+        ).trim();
+    }
+
+    // NORMALIZAR TEXTO
+
+    function normalizarTexto(texto) {
+
+        return String(texto ?? "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .toLowerCase();
+    }
+
+    // CRIAR OPÇÃO
+
     function criarOpcao(valor, texto) {
-        const opcao = document.createElement("option");
+
+        const opcao =
+            document.createElement("option");
 
         opcao.value = valor;
         opcao.textContent = texto;
@@ -51,397 +360,816 @@ document.addEventListener("DOMContentLoaded", () => {
         return opcao;
     }
 
-    // Limpa a selecao de lote e as quantidades
+    // OBTER PRODUTO SELECIONADO
+
+    function produtoSelecionado() {
+
+        return produtos.find(
+            (produto) =>
+                produto.id === produtoSelect.value
+        );
+    }
+
+    // OBTER LOTE SELECIONADO
+
+    function loteSelecionado() {
+
+        return lotes.find(
+            (lote) =>
+                lote.id === loteSelect.value
+        );
+    }
+
+    // VERIFICAR SE O LOTE PERTENCE AO PRODUTO
+
+    function mesmoProduto(lote, produto) {
+
+        if (!lote || !produto) {
+            return false;
+        }
+
+        // PRIORIZAR RELACIONAMENTO POR ID
+
+        if (lote.itemId) {
+
+            return lote.itemId === produto.id;
+        }
+
+        // COMPATIBILIDADE COM A API DE LOTES
+        // QUE RETORNA SOMENTE O NOME DO PRODUTO
+
+        return normalizarTexto(lote.produto) ===
+            normalizarTexto(produto.nome);
+    }
+
+    // VERIFICAR DISPONIBILIDADE DO LOTE
+
+    function loteDisponivel(lote) {
+
+        if (!lote) {
+            return false;
+        }
+
+        // IGNORAR LOTES INATIVOS OU ARQUIVADOS
+
+        if (
+            lote.inativo === true ||
+            lote.arquivado === true
+        ) {
+            return false;
+        }
+
+        const saldo = converterNumero(
+            lote.quantidadeDisponivel
+        );
+
+        return (
+            Number.isFinite(saldo) &&
+            saldo > 0
+        );
+    }
+
+    // LISTAR LOTES DISPONÍVEIS DO PRODUTO
+
+    function lotesDoProduto(produto) {
+
+        if (!produto) {
+            return [];
+        }
+
+        return lotes.filter(
+            (lote) =>
+                mesmoProduto(lote, produto) &&
+                loteDisponivel(lote)
+        );
+    }
+
+    // FORMATAR QUANTIDADE
+
+    function formatarQuantidade(valor) {
+
+        const numero = converterNumero(valor);
+
+        if (!Number.isFinite(numero)) {
+            return "-";
+        }
+
+        return numero.toLocaleString("pt-BR", {
+            maximumFractionDigits: 6
+        });
+    }
+
+    // LIMPAR LOTE
+
     function limparLotes() {
+
         loteSelect.replaceChildren(
-            criarOpcao("", "Selecione um lote disponível")
+            criarOpcao(
+                "",
+                "Selecione um produto primeiro"
+            )
         );
 
         loteSelect.value = "";
+
         quantidadeDisponivel.value = "";
         quantidadeSaida.value = "";
+
+        loteSelect.disabled = true;
     }
 
-    // Localiza o lote selecionado
-    function loteSelecionado() {
-        return lotes.find(
-            lote => lote.id === loteSelect.value
-        );
-    }
+    // ATUALIZAR BLOQUEIO DOS CAMPOS
 
-    // Bloqueia o formulario durante o envio
-    // e quando existe uma operacao com resultado incerto.
     function atualizarBloqueio() {
-        const travarCampos =
-            enviando || operacaoPendente !== null;
 
-        formulario.querySelectorAll(
-            "input, select, textarea"
-        ).forEach(campo => {
-            // Campo de saldo sempre e somente leitura.
-            if (campo === quantidadeDisponivel) {
-                return;
-            }
+        const bloquear =
+            carregandoDados ||
+            enviando ||
+            operacaoPendente !== null;
 
-            campo.disabled = travarCampos;
+        // CAMPOS DE EDIÇÃO
+
+        const campos = [
+            produtoSelect,
+            loteSelect,
+            quantidadeSaida,
+            dataSaida,
+            motivo,
+            observacao
+        ];
+
+        campos.forEach((campo) => {
+
+            campo.disabled = bloquear;
         });
 
-        if (!travarCampos) {
-            produtoSelect.disabled = produtos.length === 0;
+        // SALDO SEMPRE SOMENTE LEITURA
 
-            const produto = produtos.find(
-                item => item.id === produtoSelect.value
+        quantidadeDisponivel.readOnly = true;
+
+        // HABILITAR SOMENTE PRODUTOS DISPONÍVEIS
+
+        if (!bloquear) {
+
+            produtoSelect.disabled =
+                produtos.length === 0;
+
+            const produto =
+                produtoSelecionado();
+
+            loteSelect.disabled =
+                lotesDoProduto(produto).length === 0;
+        }
+
+        // O BOTÃO PERMITE REPETIR A MESMA OPERAÇÃO
+        // EM CASO DE RESULTADO NÃO CONFIRMADO
+
+        botaoEnviar.disabled =
+            carregandoDados ||
+            enviando ||
+            (
+                operacaoPendente === null &&
+                produtos.length === 0
             );
 
-            const existemLotes = produto && lotes.some(lote => {
-                const mesmoProduto = lote.itemId
-                    ? lote.itemId === produto.id
-                    : lote.produto === produto.nome;
+        botaoCancelar.disabled = bloquear;
 
-                return mesmoProduto &&
-                    Number(lote.quantidadeDisponivel) > 0;
-            });
-
-            loteSelect.disabled = !existemLotes;
-        }
-
-        // O botao de envio permanece disponivel para
-        // repetir uma operacao pendente com a mesma chave.
-        botaoEnviar.disabled = enviando;
-
-        // Nao permite cancelar uma operacao incerta.
-        if (botaoCancelar) {
-            botaoCancelar.disabled = travarCampos;
-        }
+        botaoEnviar.textContent = enviando
+            ? "Registrando..."
+            : operacaoPendente
+                ? "Tentar novamente"
+                : "Registrar saída";
     }
 
-    // Busca produtos e lotes no backend
+    // CARREGAR PRODUTOS E LOTES
+
     async function carregarDados() {
-        produtoSelect.disabled = true;
-        loteSelect.disabled = true;
+
+        carregandoDados = true;
+
+        atualizarBloqueio();
+        limparErro();
 
         try {
-            const [respostaProdutos, respostaLotes] =
-                await Promise.all([
-                    fetch(`${API}/api/produtos`, {
-                        cache: "no-store"
-                    }),
-                    fetch(`${API}/api/lotes`, {
-                        cache: "no-store"
-                    })
-                ]);
 
-            if (!respostaProdutos.ok || !respostaLotes.ok) {
-                throw new Error(
-                    "Erro ao consultar produtos e lotes."
-                );
-            }
+            // CONSULTAR SOMENTE COM TOKEN
 
-            const dadosProdutos = await respostaProdutos.json();
-            const dadosLotes = await respostaLotes.json();
+            const [
+                respostaProdutos,
+                respostaLotes
+            ] = await Promise.all([
+
+                requisicaoAutenticada(
+                    `${API}/produtos`
+                ),
+
+                requisicaoAutenticada(
+                    `${API}/lotes`
+                )
+            ]);
+
+            // LER RESPOSTAS
+
+            const dadosProdutos =
+                await lerResposta(respostaProdutos);
+
+            const dadosLotes =
+                await lerResposta(respostaLotes);
+
+            // VALIDAR FORMATO
+
+            const listaProdutos =
+                Array.isArray(dadosProdutos)
+                    ? dadosProdutos
+                    : dadosProdutos.produtos ??
+                      dadosProdutos.itens;
+
+            const listaLotes =
+                dadosLotes.lotes;
 
             if (
-                !Array.isArray(dadosProdutos.produtos) ||
-                !Array.isArray(dadosLotes.lotes)
+                !Array.isArray(listaProdutos) ||
+                !Array.isArray(listaLotes)
             ) {
+
                 throw new Error(
-                    "Formato de resposta invalido."
+                    "Formato inválido dos dados retornados."
                 );
             }
 
-            produtos = dadosProdutos.produtos.filter(
-                produto => produto.status === "ativo"
-            );
+            // MANTER SOMENTE PRODUTOS ATIVOS
 
-            lotes = dadosLotes.lotes;
+            produtos = listaProdutos
+                .filter((produto) => {
+
+                    return (
+                        normalizarTexto(
+                            produto.status ?? "ativo"
+                        ) === "ativo"
+                    );
+                })
+                .map((produto) => ({
+
+                    ...produto,
+
+                    id: obterId(produto),
+
+                    nome: obterNomeProduto(produto)
+                }))
+                .filter((produto) => {
+
+                    return (
+                        produto.id &&
+                        produto.nome
+                    );
+                });
+
+            // NORMALIZAR LOTES
+
+            lotes = listaLotes.map((lote) => ({
+
+                ...lote,
+
+                id: obterId(lote),
+
+                itemId:
+                    typeof lote.itemId === "object"
+                        ? (
+                            lote.itemId?.$oid ??
+                            lote.itemId?.oid ??
+                            ""
+                        )
+                        : (
+                            lote.itemId ?? ""
+                        )
+            }));
+
+            // PREENCHER SELECT DE PRODUTOS
 
             produtoSelect.replaceChildren(
-                criarOpcao("", "Selecione um produto cadastrado")
+                criarOpcao(
+                    "",
+                    "Selecione um produto cadastrado"
+                )
             );
 
-            produtos.forEach(produto => {
-                produtoSelect.appendChild(
-                    criarOpcao(produto.id, produto.nome)
-                );
+            produtos.forEach((produto) => {
+
+                const lotesDisponiveis =
+                    lotesDoProduto(produto);
+
+                // EXIBIR SOMENTE PRODUTOS COM LOTES
+                // QUE TENHAM QUANTIDADE DISPONÍVEL
+
+                if (lotesDisponiveis.length > 0) {
+
+                    produtoSelect.appendChild(
+                        criarOpcao(
+                            produto.id,
+                            produto.nome
+                        )
+                    );
+                }
             });
+
+            // ATUALIZAR LISTA DE PRODUTOS
+            // EFETIVAMENTE DISPONÍVEIS
+
+            produtos = produtos.filter(
+                (produto) =>
+                    lotesDoProduto(produto).length > 0
+            );
 
             limparLotes();
 
-            return true;
+            // INFORMAR LISTA VAZIA
+
+            if (produtos.length === 0) {
+
+                mostrarErro(
+                    "Nenhum produto com lote disponível foi encontrado."
+                );
+            }
 
         } catch (erro) {
+
             console.error(
-                "Erro ao carregar os dados:",
+                "Erro ao carregar produtos e lotes:",
                 erro
             );
 
-            alert(
-                "Não foi possível carregar os produtos e lotes. " +
-                "Verifique se o backend Java está funcionando."
+            produtos = [];
+            lotes = [];
+
+            produtoSelect.replaceChildren(
+                criarOpcao(
+                    "",
+                    "Não foi possível carregar produtos"
+                )
             );
 
-            return false;
+            limparLotes();
+
+            mostrarErro(
+                `Não foi possível carregar os dados: ${erro.message}`
+            );
 
         } finally {
+
+            carregandoDados = false;
+
             atualizarBloqueio();
         }
     }
 
-    // Mostra os lotes do produto selecionado
+    // QUANDO O PRODUTO É ALTERADO
+
     produtoSelect.addEventListener("change", () => {
+
         if (operacaoPendente || enviando) {
             return;
         }
 
+        limparErro();
         limparLotes();
 
-        const produto = produtos.find(
-            item => item.id === produtoSelect.value
-        );
+        const produto =
+            produtoSelecionado();
 
         if (!produto) {
-            loteSelect.disabled = true;
+
+            atualizarBloqueio();
             return;
         }
 
-        // Usa itemId quando disponivel.
-        // Mantem compatibilidade com a API atual,
-        // que pode retornar somente o nome do produto.
-        const lotesDisponiveis = lotes.filter(lote => {
-            const mesmoProduto = lote.itemId
-                ? lote.itemId === produto.id
-                : lote.produto === produto.nome;
+        // CARREGAR LOTES DO PRODUTO
 
-            return mesmoProduto &&
-                Number(lote.quantidadeDisponivel) > 0;
-        });
+        const disponiveis =
+            lotesDoProduto(produto);
 
-        lotesDisponiveis.forEach(lote => {
+        loteSelect.replaceChildren(
+            criarOpcao(
+                "",
+                "Selecione um lote disponível"
+            )
+        );
+
+        disponiveis.forEach((lote) => {
+
+            const codigo =
+                lote.codigo || lote.id;
+
+            const saldo = formatarQuantidade(
+                lote.quantidadeDisponivel
+            );
+
             const texto =
-                `${lote.codigo} — Saldo: ` +
-                `${lote.quantidadeDisponivel} ` +
+                `${codigo} — Saldo: ${saldo} ` +
                 `${produto.unidadeMedida || ""}`;
 
             loteSelect.appendChild(
-                criarOpcao(lote.id, texto)
+                criarOpcao(
+                    lote.id,
+                    texto.trim()
+                )
             );
         });
 
-        if (lotesDisponiveis.length === 0) {
+        if (disponiveis.length === 0) {
+
             loteSelect.replaceChildren(
-                criarOpcao("", "Nenhum lote disponível")
+                criarOpcao(
+                    "",
+                    "Nenhum lote disponível"
+                )
             );
         }
 
-        loteSelect.disabled = lotesDisponiveis.length === 0;
+        atualizarBloqueio();
     });
 
-    // Preenche automaticamente a quantidade disponivel
+    // QUANDO O LOTE É ALTERADO
+
     loteSelect.addEventListener("change", () => {
+
         if (operacaoPendente || enviando) {
             return;
         }
 
+        limparErro();
+
         const lote = loteSelecionado();
 
+        // PREENCHER SALDO AUTOMATICAMENTE
+
         quantidadeDisponivel.value = lote
-            ? lote.quantidadeDisponivel
+            ? formatarQuantidade(
+                lote.quantidadeDisponivel
+            )
             : "";
 
         quantidadeSaida.value = "";
     });
 
-    // Cancela apenas um formulario sem operacao pendente
-    if (botaoCancelar) {
-        botaoCancelar.addEventListener("click", () => {
-            if (enviando || operacaoPendente) {
-                return;
-            }
+    // CANCELAR FORMULÁRIO
 
-            formulario.reset();
+    botaoCancelar.addEventListener("click", () => {
 
-            limparLotes();
+        if (enviando || operacaoPendente) {
+            return;
+        }
 
-            dataSaida.value = dataAtual();
+        formulario.reset();
 
-            atualizarBloqueio();
-        });
-    }
+        limparErro();
+        limparLotes();
+        configurarData();
 
-    // Valida o formulario e prepara uma nova operacao
-    function prepararOperacao() {
-        const produto = produtos.find(
-            item => item.id === produtoSelect.value
-        );
+        atualizarBloqueio();
+    });
+
+    // INVALIDAR QUANTIDADES INCORRETAS
+
+    quantidadeSaida.addEventListener("input", () => {
+
+        limparErro();
 
         const lote = loteSelecionado();
 
+        if (!lote) {
+            return;
+        }
+
+        const texto = quantidadeSaida.value
+            .trim()
+            .replace(",", ".");
+
+        if (!texto) {
+            return;
+        }
+
+        const quantidade = Number(texto);
+
+        const saldo = converterNumero(
+            lote.quantidadeDisponivel
+        );
+
+        if (
+            !Number.isFinite(quantidade) ||
+            quantidade <= 0
+        ) {
+
+            mostrarErro(
+                "Informe uma quantidade maior que zero."
+            );
+
+            return;
+        }
+
+        if (quantidade > saldo) {
+
+            mostrarErro(
+                "A quantidade de saída não pode superar o saldo disponível."
+            );
+        }
+    });
+
+    // VALIDAR E PREPARAR OPERAÇÃO
+
+    function prepararOperacao() {
+
+        const produto =
+            produtoSelecionado();
+
+        const lote =
+            loteSelecionado();
+
+        // VALIDAR PRODUTO E LOTE
+
         if (!produto || !lote) {
+
             throw new Error(
                 "Selecione um produto e um lote válido."
             );
         }
 
-        const quantidadeTexto = quantidadeSaida.value
-            .trim()
-            .replace(",", ".");
+        if (!mesmoProduto(lote, produto)) {
 
-        const quantidade = Number(quantidadeTexto);
-        const saldo = Number(lote.quantidadeDisponivel);
+            throw new Error(
+                "O lote não pertence ao produto selecionado."
+            );
+        }
+
+        if (!loteDisponivel(lote)) {
+
+            throw new Error(
+                "O lote selecionado não está disponível."
+            );
+        }
+
+        // VALIDAR QUANTIDADE
+
+        const quantidadeTexto =
+            quantidadeSaida.value
+                .trim()
+                .replace(",", ".");
+
+        const quantidade = Number(
+            quantidadeTexto
+        );
+
+        const saldo = converterNumero(
+            lote.quantidadeDisponivel
+        );
 
         if (
             !quantidadeTexto ||
             !Number.isFinite(quantidade) ||
             quantidade <= 0
         ) {
+
             throw new Error(
                 "Informe uma quantidade de saída válida."
             );
         }
 
-        if (quantidade > saldo) {
+        if (
+            !Number.isFinite(saldo) ||
+            quantidade > saldo
+        ) {
+
             throw new Error(
-                "A quantidade de saída não pode superar " +
-                "o saldo disponível."
+                "A quantidade de saída não pode superar o saldo disponível."
             );
         }
+
+        // VALIDAR DATA
+
+        if (!dataSaida.value) {
+
+            throw new Error(
+                "Informe a data da saída."
+            );
+        }
+
+        if (dataSaida.value > dataAtual()) {
+
+            throw new Error(
+                "A data de saída não pode ser futura."
+            );
+        }
+
+        // VALIDAR MOTIVO
 
         if (
-            !dataSaida.value ||
-            !motivo.value ||
-            !observacao.value.trim()
+            !MOTIVOS_VALIDOS.includes(
+                motivo.value
+            )
         ) {
+
             throw new Error(
-                "Preencha todos os campos obrigatórios."
+                "Selecione um motivo válido."
             );
         }
 
-        if (observacao.value.trim().length > 1000) {
+        // VALIDAR OBSERVAÇÃO
+
+        const textoObservacao =
+            observacao.value.trim();
+
+        if (
+            !textoObservacao ||
+            textoObservacao.length > 1000
+        ) {
+
             throw new Error(
-                "A observação deve ter no máximo 1000 caracteres."
+                "A observação deve ter entre 1 e 1000 caracteres."
             );
         }
+
+        // GERAR CHAVE ÚNICA DA OPERAÇÃO
 
         if (!globalThis.crypto?.randomUUID) {
+
             throw new Error(
-                "O navegador não conseguiu gerar " +
-                "o identificador da operação."
+                "O navegador não conseguiu gerar o identificador da operação."
             );
         }
 
-        // Os dados sao preparados somente uma vez.
-        // Em um reenvio, esta funcao nao sera executada.
+        // PREPARAR DADOS PARA O BACKEND
+
         return {
+
             itemId: produto.id,
+
             loteId: lote.id,
+
             quantidade: quantidadeTexto,
+
             dataSaida: dataSaida.value,
+
             motivo: motivo.value,
-            observacao: observacao.value.trim(),
-            idempotencyKey: crypto.randomUUID()
+
+            observacao: textoObservacao,
+
+            idempotencyKey:
+                crypto.randomUUID()
         };
     }
 
-    // Registra a saida no backend
-    formulario.addEventListener("submit", async evento => {
-        evento.preventDefault();
+    // REGISTRAR SAÍDA
 
-        // Impede dois envios simultaneos
-        if (enviando) {
-            return;
-        }
+    formulario.addEventListener(
+        "submit",
+        async (evento) => {
 
-        // Se uma operacao anterior ainda nao foi confirmada,
-        // reutiliza exatamente os mesmos dados.
-        if (!operacaoPendente) {
-            try {
-                const dados = prepararOperacao();
+            evento.preventDefault();
 
-                operacaoPendente = {
-                    dados: dados
-                };
+            // IMPEDIR ENVIO DUPLO SIMULTÂNEO
 
-            } catch (erro) {
-                alert(erro.message);
+            if (enviando || carregandoDados) {
                 return;
             }
-        }
 
-        enviando = true;
-        atualizarBloqueio();
+            limparErro();
 
-        try {
-            const resposta = await fetch(
-                `${API}/api/movimentacoes`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(
-                        operacaoPendente.dados
-                    )
+            // VERIFICAR SESSÃO ANTES DO ENVIO
+
+            if (!verificarSessao()) {
+                return;
+            }
+
+            // NOVA OPERAÇÃO
+
+            if (!operacaoPendente) {
+
+                try {
+
+                    // VALIDAR TODOS OS CAMPOS
+
+                    if (!formulario.reportValidity()) {
+                        return;
+                    }
+
+                    const dados = prepararOperacao();
+
+                    operacaoPendente = {
+                        dados
+                    };
+
+                } catch (erro) {
+
+                    mostrarErro(erro.message);
+
+                    return;
                 }
-            );
+            }
 
-            let resultado = {};
+            enviando = true;
+
+            atualizarBloqueio();
 
             try {
-                resultado = await resposta.json();
-            } catch (erroLeitura) {
-                // Resposta sem JSON valido.
-            }
 
-            if (!resposta.ok) {
-                throw new Error(
+                // REQUISIÇÃO AUTENTICADA AO CONTROLLER
+
+                const resposta =
+                    await requisicaoAutenticada(
+                        `${API}/movimentacoes`,
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+
+                            body: JSON.stringify(
+                                operacaoPendente.dados
+                            )
+                        }
+                    );
+
+                const resultado =
+                    await lerResposta(resposta);
+
+                // OPERAÇÃO CONFIRMADA
+
+                operacaoPendente = null;
+
+                // LIMPAR FORMULÁRIO
+
+                formulario.reset();
+
+                limparLotes();
+                configurarData();
+
+                alert(
                     resultado.mensagem ||
-                    resultado.erro ||
-                    "Não foi possível confirmar a saída."
+                    "Saída registrada com sucesso!"
                 );
+
+            } catch (erro) {
+
+                console.error(
+                    "Erro ao registrar saída:",
+                    erro
+                );
+
+                // ERROS 4XX NÃO REPRESENTAM
+                // UMA OPERAÇÃO PENDENTE INCERTA
+                // EXCETO ERROS DE AUTENTICAÇÃO,
+                // QUE REDIRECIONAM AO LOGIN
+
+                if (
+                    Number.isInteger(erro.status) &&
+                    erro.status >= 400 &&
+                    erro.status < 500
+                ) {
+
+                    operacaoPendente = null;
+
+                    mostrarErro(
+                        erro.message
+                    );
+
+                } else {
+
+                    // CONEXÃO OU RESULTADO NÃO CONFIRMADO
+                    // PRESERVAR DADOS E A MESMA CHAVE
+                    // PARA EVITAR BAIXA DUPLICADA
+
+                    mostrarErro(
+                        "Não foi possível confirmar a operação. " +
+                        "Os dados foram preservados. " +
+                        "Clique em Tentar novamente para " +
+                        "reenviar a mesma operação. " +
+                        erro.message
+                    );
+                }
+
+            } finally {
+
+                enviando = false;
+
+                atualizarBloqueio();
             }
 
-            // O backend confirmou a operacao.
-            // Somente agora a chave pode ser descartada.
-            operacaoPendente = null;
+            // ATUALIZAR SALDO DEPOIS DA CONFIRMAÇÃO
 
-            formulario.reset();
-            dataSaida.value = dataAtual();
+            if (!operacaoPendente) {
 
-            alert(
-                resultado.mensagem ||
-                "Saída registrada com sucesso!"
-            );
-
-        } catch (erro) {
-            console.error(
-                "Erro ao registrar saída:",
-                erro
-            );
-
-            // Mantem os dados e a chave da operacao.
-            // Um novo clique repetira a mesma requisicao.
-            alert(
-                "Não foi possível confirmar a saída.\n\n" +
-                "Os dados foram preservados para evitar " +
-                "um registro duplicado.\n\n" +
-                "Você pode tentar novamente usando " +
-                "o botão Registrar Saída, sem recarregar " +
-                "a página.\n\n" +
-                "Detalhes: " + erro.message
-            );
-
-        } finally {
-            enviando = false;
-            atualizarBloqueio();
+                await carregarDados();
+            }
         }
+    );
 
-        // Atualiza o saldo somente quando a operacao
-        // foi confirmada e nao existe outra pendente.
-        if (!operacaoPendente) {
-            await carregarDados();
-        }
-    });
+    // INICIALIZAR TELA
 
-    // Carregamento inicial
+    if (!verificarSessao()) {
+        return;
+    }
+
+    configurarData();
+
     carregarDados();
 });

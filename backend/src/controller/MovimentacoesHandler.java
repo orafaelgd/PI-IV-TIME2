@@ -52,6 +52,8 @@ public class MovimentacoesHandler implements HttpHandler {
                 produtos
             );
 
+        // MESMO SESSAOSERVICE DAS OUTRAS TELAS
+
         this.sessaoService =
             new SessaoService(
                 usuarios,
@@ -166,7 +168,13 @@ public class MovimentacoesHandler implements HttpHandler {
 
             // AUTENTICAR USUÁRIO
 
-            // Verifica o token enviado pelo frontend
+            // O SESSAOSERVICE VALIDA:
+            // 1. TOKEN BEARER
+            // 2. SESSÃO EXISTENTE
+            // 3. DATA DE EXPIRAÇÃO
+            // 4. USUÁRIO CADASTRADO
+            // 5. USUÁRIO ATIVO
+
             Document usuario =
                 sessaoService.autenticar(
                     requisicao
@@ -186,18 +194,17 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // RECUPERAR ID DO USUÁRIO LOGADO
+            // RECUPERAR ID REAL DA CONTA
 
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
 
             // LER CORPO DA REQUISIÇÃO
+            // LIMITE DE 8 KB
 
             byte[] conteudo =
                 requisicao.getRequestBody()
                     .readNBytes(8193);
-
-            // LIMITE DE 8 KB
 
             if (conteudo.length > 8192) {
 
@@ -210,7 +217,7 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // CONVERTER JSON
+            // CONVERTER CORPO JSON
 
             Document dados;
 
@@ -234,10 +241,11 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // REGISTRAR MOVIMENTAÇÃO
+            // REGISTRAR SAÍDA
 
-            // O Service executa as validações
-            // e as operações no MongoDB
+            // O USUARIOID É OBTIDO DA SESSÃO
+            // E NÃO DO JSON ENVIADO PELO FRONTEND
+
             MovimentacoesService.Resultado resultado =
                 movimentacoesService.registrarSaida(
                     dados,
@@ -254,8 +262,6 @@ public class MovimentacoesHandler implements HttpHandler {
 
         } catch (IllegalArgumentException erro) {
 
-            // DADOS INVÁLIDOS
-
             responder(
                 requisicao,
                 400,
@@ -264,8 +270,6 @@ public class MovimentacoesHandler implements HttpHandler {
             );
 
         } catch (MongoException erro) {
-
-            // ERRO DO MONGODB
 
             System.err.println(
                 "Erro MongoDB em movimentações: " +
@@ -279,8 +283,6 @@ public class MovimentacoesHandler implements HttpHandler {
             );
 
         } catch (RuntimeException erro) {
-
-            // ERRO INESPERADO
 
             System.err.println(
                 "Erro ao registrar movimentação: " +
