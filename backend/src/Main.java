@@ -17,11 +17,13 @@ import org.bson.Document;
 import controller.LoginHandler;
 import controller.DashboardHandler;
 import controller.LotesHandler;
+import controller.MovimentacoesHandler;
 import controller.PerfilUsuarioHandler;
 import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
 import controller.HistoricoDespHandler;
+import controller.ProximosVencimentoHandler;
 
 // SERVIDOR SOCKET
 
@@ -32,15 +34,19 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
+        // CONEXÃO COM O MONGODB
+
         MongoClient cliente = MongoDBConnection.conectar();
 
         try {
 
-            // CONEXÃO COM O BANCO
+            // SELECIONAR BANCO DE DADOS
 
             MongoDatabase banco = cliente.getDatabase(
                 "desperdicio_alimentos"
             );
+
+            // VERIFICAR CONEXÃO
 
             banco.runCommand(
                 new Document("ping", 1)
@@ -66,27 +72,52 @@ public class Main {
             MongoCollection<Document> categorias =
                 banco.getCollection("categorias");
 
-            // ÍNDICES DE USUÁRIOS E SESSÕES
+            // ÍNDICES DE USUÁRIOS
 
             // Impede e-mails duplicados
+
             usuarios.createIndex(
                 Indexes.ascending("email"),
                 new IndexOptions().unique(true)
             );
 
+            // ÍNDICES DE SESSÕES
+
             // Garante tokens únicos
+
             sessoes.createIndex(
                 Indexes.ascending("token"),
                 new IndexOptions().unique(true)
             );
 
-            // Remove sessões expiradas
+            // Remove automaticamente sessões expiradas
+
             sessoes.createIndex(
                 Indexes.ascending("expiraEm"),
                 new IndexOptions().expireAfter(
                     0L,
                     TimeUnit.SECONDS
                 )
+            );
+
+            // ÍNDICE DE MOVIMENTAÇÕES
+
+            // Impede registrar duas movimentações
+            // com a mesma chave de idempotência
+
+            // Mantém compatibilidade com registros
+            // antigos que não possuem idempotencyKey
+
+            movimentacoes.createIndex(
+                Indexes.ascending("idempotencyKey"),
+                new IndexOptions()
+                    .unique(true)
+                    .partialFilterExpression(
+                        new Document(
+                            "idempotencyKey",
+                            new Document("$exists", true)
+                        )
+                    )
             );
 
             // SERVIDOR HTTP
@@ -131,18 +162,24 @@ public class Main {
 
             // PERFIL DO USUÁRIO
 
-            servidor.createContext(
-                "/api/perfil",
+            // Consulta e atualiza os dados do usuário
+            // identificado pelo token de autenticação
+
+            PerfilUsuarioHandler perfilHandler =
                 new PerfilUsuarioHandler(
                     usuarios,
                     sessoes
-                )
+                );
+
+            servidor.createContext(
+                "/api/perfil",
+                perfilHandler
             );
 
             // DASHBOARD
 
-            // Valida a sessão e consulta somente
-            // os produtos e lotes da conta autenticada
+            // Consulta somente os dados da conta logada
+
             DashboardHandler dashboardHandler =
                 new DashboardHandler(
                     produtos,
@@ -158,8 +195,9 @@ public class Main {
 
             // RELATÓRIOS
 
-            // Valida a sessão e separa os indicadores,
-            // gráficos e relatórios financeiros por usuário
+            // Consulta os relatórios e indicadores
+            // pertencentes ao usuário autenticado
+
             RelatoriosHandler relatoriosHandler =
                 new RelatoriosHandler(
                     produtos,
@@ -176,8 +214,9 @@ public class Main {
 
             // PRODUTOS E CATEGORIAS
 
-            // Permite que cada usuário gerencie
-            // somente seus próprios produtos e categorias
+            // Gerencia os produtos e categorias
+            // associados ao usuário autenticado
+
             ProdutosHandler produtosHandler =
                 new ProdutosHandler(
                     produtos,
@@ -200,8 +239,8 @@ public class Main {
 
             // LOTES
 
-            // Valida a sessão e garante que os lotes
-            // pertençam ao usuário autenticado
+            // Gerencia os lotes da conta autenticada
+
             LotesHandler lotesHandler =
                 new LotesHandler(
                     lotes,
@@ -218,35 +257,55 @@ public class Main {
 
             // PRÓXIMOS VENCIMENTOS
 
-            // Rota HTTP antiga mantida desativada
-            // Os próximos vencimentos do Dashboard
-            // já são consultados pelo DashboardService
+            // NOVO CONTROLLER:
+            // Recebe a requisição e valida a sessão.
+            //
+            // NOVO SERVICE:
+            // Consulta os lotes e produtos do usuário
+            // dentro do período solicitado.
 
-            // servidor.createContext(
-            //     "/api/lotes/proximos-vencimento",
-            //     new ProximosVencimentoHandler(
-            //         lotes,
-            //         produtos
-            //     )
-            // );
+            ProximosVencimentoHandler vencimentosHandler =
+                new ProximosVencimentoHandler(
+                    lotes,
+                    produtos,
+                    usuarios,
+                    sessoes
+                );
+
+            servidor.createContext(
+                "/api/lotes/proximos-vencimento",
+                vencimentosHandler
+            );
 
             // MOVIMENTAÇÕES
 
-            // Mantém a integração atual de movimentações
-            servidor.createContext(
-                "/api/movimentacoes",
+            // CONTROLLER:
+            // Recebe a requisição e autentica o usuário.
+            //
+            // SERVICE:
+            // Valida a saída, atualiza o estoque
+            // e registra a movimentação no MongoDB.
+
+            MovimentacoesHandler movimentacoesHandler =
                 new MovimentacoesHandler(
                     cliente,
                     lotes,
-                    movimentacoes
-                )
+                    movimentacoes,
+                    produtos,
+                    usuarios,
+                    sessoes
+                );
+
+            servidor.createContext(
+                "/api/movimentacoes",
+                movimentacoesHandler
             );
 
             // HISTÓRICO DE DESPERDÍCIO
 
-            // Utiliza o SessaoService para autenticar
-            // e consulta somente registros vinculados
-            // aos lotes e produtos da conta logada
+            // Retorna somente movimentações associadas
+            // aos lotes e produtos do usuário autenticado
+
             HistoricoDespHandler historicoHandler =
                 new HistoricoDespHandler(banco);
 
@@ -258,7 +317,8 @@ public class Main {
             // REPOSITÓRIO DO SERVIDOR SOCKET
 
             // Compartilha as coleções de lotes e produtos
-            // com o serviço responsável pelos vencimentos
+            // com o serviço de vencimentos via Socket
+
             RepositorioVencimentos repositorio =
                 new RepositorioVencimentos(
                     lotes,
@@ -267,8 +327,9 @@ public class Main {
 
             // THREAD DO SERVIDOR SOCKET
 
-            // Executa o servidor de vencimentos
-            // separadamente do servidor HTTP
+            // Mantém o servidor Socket independente
+            // do servidor HTTP da porta 8080
+
             Thread threadServidor = new Thread(
                 new ServidorSocket(repositorio),
                 "servidor-vencimentos"
@@ -276,22 +337,28 @@ public class Main {
 
             // ENCERRAMENTO SEGURO
 
-            // Fecha o servidor HTTP e a conexão
-            // com o MongoDB ao encerrar a aplicação
+            // Fecha o servidor HTTP e o MongoDB
+            // quando a aplicação for encerrada
+
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> {
 
                     servidor.stop(0);
+
                     cliente.close();
 
                 })
             );
 
-            // INICIALIZAÇÃO DOS SERVIDORES
+            // INICIALIZAR SERVIDOR HTTP
 
             servidor.start();
 
+            // INICIALIZAR SERVIDOR SOCKET
+
             threadServidor.start();
+
+            // MENSAGENS DO TERMINAL
 
             System.out.println(
                 "Servidor HTTP iniciado na porta 8080"
@@ -305,9 +372,16 @@ public class Main {
                 "Servidor Socket inicializado!"
             );
 
+            System.out.println(
+                "Rota de próximos vencimentos ativada!"
+            );
+
         } catch (Exception erro) {
 
+            // ENCERRAR CONEXÃO SE A INICIALIZAÇÃO FALHAR
+
             cliente.close();
+
             throw erro;
         }
     }

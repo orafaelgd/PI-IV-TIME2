@@ -1,490 +1,970 @@
+
+
+// PRÓXIMOS DO VENCIMENTO
+// AUTENTICAÇÃO, TABELA PADRONIZADA E PESQUISA
+
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = "http://localhost:8081/api/lotes/proximos-vencimento";
 
-  const botoes = document.querySelectorAll("[data-dias]");
-  const lista = document.getElementById("lista-vencimentos");
-  const mensagem = document.getElementById("mensagem-vencimentos");
+    // CONFIGURAÇÕES
 
-  let requisicaoAtual = null;
-  let modalAberto = null;
+    const API_URL =
+        "http://localhost:8080/api/lotes/proximos-vencimento";
 
-  // Formata uma data ISO para o formato brasileiro
-  function formatarData(dataISO) {
-    const data = String(dataISO || "").substring(0, 10);
+    const PAGINA_LOGIN = "login-usuario.html";
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
-      return "-";
+    const PERIODOS_VALIDOS = [1, 3, 7, 15, 30];
+
+    // ELEMENTOS DA TELA
+
+    const botoes =
+        document.querySelectorAll("[data-dias]");
+
+    const tabela =
+        document.getElementById("lista-vencimentos");
+
+    const mensagem =
+        document.getElementById("mensagem-vencimentos");
+
+    const campoPesquisa =
+        document.getElementById("pesquisaProduto");
+
+    // VARIÁVEIS
+
+    let requisicaoAtual = null;
+    let modalAberto = null;
+
+    // LOTES DO PERÍODO SELECIONADO
+
+    let lotesCarregados = [];
+
+    let carregando = false;
+    let erroCarregamento = false;
+
+    // VALIDAR ELEMENTOS
+
+    if (!tabela || !mensagem || !campoPesquisa) {
+
+        console.error(
+            "Elementos da tela de vencimentos não encontrados."
+        );
+
+        return;
     }
 
-    const [ano, mes, dia] = data.split("-");
-    return `${dia}/${mes}/${ano}`;
-  }
+    // AUTENTICAÇÃO
 
-  // Formata a quantidade com a unidade do produto
-  function formatarQuantidade(quantidade, unidade) {
-    const numero = Number(quantidade);
+    function obterToken() {
 
-    if (!Number.isFinite(numero)) {
-      return "-";
+        return sessionStorage.getItem("token");
     }
 
-    return (
-      new Intl.NumberFormat("pt-BR", {
-        maximumFractionDigits: 6,
-      }).format(numero) +
-      " " +
-      (unidade || "")
-    );
-  }
+    // ENCERRAR SESSÃO
 
-  // Calcula os dias restantes usando o horário de São Paulo
-  function calcularDiasRestantes(dataISO) {
-    const data = String(dataISO || "").substring(0, 10);
+    function encerrarAcesso() {
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
-      return null;
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+
+        window.location.replace(PAGINA_LOGIN);
     }
 
-    const [ano, mes, dia] = data.split("-").map(Number);
+    // REQUISIÇÃO AUTENTICADA
 
-    const destino = Date.UTC(ano, mes - 1, dia);
+    async function requisicaoAutenticada(url, sinal) {
 
-    const partes = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Sao_Paulo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(new Date());
+        const token = obterToken();
 
-    const obter = (tipo) =>
-      Number(partes.find((parte) => parte.type === tipo).value);
+        if (!token || !token.trim()) {
 
-    const hoje = Date.UTC(obter("year"), obter("month") - 1, obter("day"));
+            encerrarAcesso();
 
-    return Math.round((destino - hoje) / (24 * 60 * 60 * 1000));
-  }
-
-  // Exibe mensagens de carregamento e erro
-  function mostrarMensagem(texto) {
-    mensagem.textContent = texto;
-    mensagem.classList.remove("hidden");
-    mensagem.hidden = false;
-  }
-
-  function esconderMensagem() {
-    mensagem.classList.add("hidden");
-    mensagem.hidden = true;
-  }
-
-  // Cria elementos de texto para o modal
-  function criarTexto(tag, texto, estilos = {}) {
-    const elemento = document.createElement(tag);
-    elemento.textContent = texto;
-    Object.assign(elemento.style, estilos);
-    return elemento;
-  }
-
-  // Abre o modal de detalhes do lote
-  function abrirModalDetalhes(lote, botaoOrigem) {
-    // Impede que dois modais fiquem abertos.
-    if (modalAberto) {
-      modalAberto.fechar();
-    }
-
-    const diasRestantes = calcularDiasRestantes(lote.dataValidade);
-
-    let situacao = "Data não disponível";
-    let corSituacao = "#64748b";
-    let fundoSituacao = "#f1f5f9";
-
-    if (diasRestantes !== null) {
-      if (diasRestantes < 0) {
-        situacao = `Vencido há ${Math.abs(diasRestantes)} dia(s)`;
-        corSituacao = "#b91c1c";
-        fundoSituacao = "#fee2e2";
-      } else if (diasRestantes === 0) {
-        situacao = "Vence hoje";
-        corSituacao = "#b91c1c";
-        fundoSituacao = "#fee2e2";
-      } else if (diasRestantes <= 3) {
-        situacao = `Vence em ${diasRestantes} dia(s)`;
-        corSituacao = "#92400e";
-        fundoSituacao = "#fef3c7";
-      } else {
-        situacao = `Vence em ${diasRestantes} dia(s)`;
-        corSituacao = "#166534";
-        fundoSituacao = "#dcfce7";
-      }
-    }
-
-    // Fundo escurecido
-    const overlay = document.createElement("div");
-
-    Object.assign(overlay.style, {
-      position: "fixed",
-      inset: "0",
-      backgroundColor: "rgba(15, 23, 42, 0.55)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "20px",
-      zIndex: "9999",
-    });
-
-    // Janela central
-    const modal = document.createElement("section");
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-
-    Object.assign(modal.style, {
-      backgroundColor: "#ffffff",
-      width: "100%",
-      maxWidth: "480px",
-      borderRadius: "12px",
-      padding: "28px",
-      boxShadow: "0 20px 50px rgba(0, 0, 0, 0.2)",
-      position: "relative",
-      maxHeight: "90vh",
-      overflowY: "auto",
-      color: "#1f2937",
-    });
-
-    // Cabeçalho
-    const cabecalho = document.createElement("div");
-
-    Object.assign(cabecalho.style, {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: "16px",
-      marginBottom: "10px",
-    });
-
-    const titulo = criarTexto("h2", "Detalhes do lote", {
-      fontSize: "21px",
-      fontWeight: "700",
-      margin: "0",
-    });
-
-    const tituloId = "titulo-modal-vencimento";
-    titulo.id = tituloId;
-    modal.setAttribute("aria-labelledby", tituloId);
-
-    const botaoX = document.createElement("button");
-    botaoX.type = "button";
-    botaoX.textContent = "×";
-    botaoX.setAttribute("aria-label", "Fechar detalhes");
-
-    Object.assign(botaoX.style, {
-      border: "none",
-      background: "transparent",
-      cursor: "pointer",
-      fontSize: "29px",
-      lineHeight: "1",
-      color: "#64748b",
-    });
-
-    cabecalho.append(titulo, botaoX);
-
-    const descricao = criarTexto(
-      "p",
-      "Informações do produto próximo ao vencimento.",
-      {
-        fontSize: "13px",
-        color: "#64748b",
-        marginBottom: "22px",
-      },
-    );
-
-    // Situação do vencimento
-    const selo = criarTexto("span", situacao, {
-      display: "inline-block",
-      backgroundColor: fundoSituacao,
-      color: corSituacao,
-      padding: "8px 13px",
-      borderRadius: "20px",
-      fontSize: "13px",
-      fontWeight: "700",
-      marginBottom: "22px",
-    });
-
-    // Área com as informações
-    const informacoes = document.createElement("div");
-
-    Object.assign(informacoes.style, {
-      backgroundColor: "#f8fafc",
-      border: "1px solid #e2e8f0",
-      borderRadius: "8px",
-      padding: "8px 18px",
-      marginBottom: "24px",
-    });
-
-    function adicionarCampo(rotulo, valor) {
-      const campo = document.createElement("div");
-
-      Object.assign(campo.style, {
-        display: "flex",
-        justifyContent: "space-between",
-        gap: "16px",
-        padding: "13px 0",
-        borderBottom: "1px solid #e2e8f0",
-      });
-
-      const label = criarTexto("span", rotulo, {
-        color: "#64748b",
-        fontSize: "14px",
-      });
-
-      const conteudo = criarTexto("strong", valor ?? "-", {
-        fontSize: "14px",
-        textAlign: "right",
-        overflowWrap: "anywhere",
-      });
-
-      campo.append(label, conteudo);
-      informacoes.appendChild(campo);
-    }
-
-    adicionarCampo("Produto", lote.produtoNome || "Produto sem nome");
-
-    adicionarCampo("Código do lote", lote.codigo || "-");
-
-    adicionarCampo(
-      "Quantidade disponível",
-      formatarQuantidade(lote.quantidadeDisponivel, lote.unidadeMedida),
-    );
-
-    adicionarCampo("Data de validade", formatarData(lote.dataValidade));
-
-    adicionarCampo("Situação", situacao);
-
-    // Botão principal
-    const rodape = document.createElement("div");
-
-    Object.assign(rodape.style, {
-      display: "flex",
-      justifyContent: "flex-end",
-    });
-
-    const botaoFechar = document.createElement("button");
-    botaoFechar.type = "button";
-    botaoFechar.textContent = "Fechar";
-
-    Object.assign(botaoFechar.style, {
-      backgroundColor: "#334155",
-      color: "#ffffff",
-      border: "none",
-      borderRadius: "7px",
-      padding: "11px 26px",
-      fontSize: "14px",
-      fontWeight: "600",
-      cursor: "pointer",
-    });
-
-    rodape.appendChild(botaoFechar);
-
-    modal.append(cabecalho, descricao, selo, informacoes, rodape);
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    const overflowAnterior = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function fechar() {
-      document.removeEventListener("keydown", tratarTeclado);
-
-      overlay.remove();
-      document.body.style.overflow = overflowAnterior;
-      modalAberto = null;
-
-      if (botaoOrigem && botaoOrigem.isConnected) {
-        botaoOrigem.focus();
-      }
-    }
-
-    function tratarTeclado(evento) {
-      if (evento.key === "Escape") {
-        fechar();
-      }
-
-      if (evento.key === "Tab") {
-        const controles = [botaoX, botaoFechar];
-        const primeiro = controles[0];
-        const ultimo = controles[controles.length - 1];
-
-        if (evento.shiftKey && document.activeElement === primeiro) {
-          evento.preventDefault();
-          ultimo.focus();
-        } else if (!evento.shiftKey && document.activeElement === ultimo) {
-          evento.preventDefault();
-          primeiro.focus();
+            throw new Error("Sessão não encontrada.");
         }
-      }
+
+        // ENVIAR TOKEN DO USUÁRIO
+
+        const resposta = await fetch(url, {
+
+            method: "GET",
+
+            headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/json"
+            },
+
+            signal: sinal,
+            cache: "no-store"
+        });
+
+        // SESSÃO EXPIRADA
+
+        if (resposta.status === 401) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sessão inválida ou expirada."
+            );
+        }
+
+        // ACESSO NEGADO
+
+        if (resposta.status === 403) {
+
+            throw new Error(
+                "Você não tem permissão para acessar os lotes."
+            );
+        }
+
+        return resposta;
     }
 
-    botaoX.addEventListener("click", fechar);
-    botaoFechar.addEventListener("click", fechar);
+    // LER RESPOSTA DA API
 
-    overlay.addEventListener("click", (evento) => {
-      if (evento.target === overlay) {
-        fechar();
-      }
-    });
+    async function lerResposta(resposta) {
 
-    document.addEventListener("keydown", tratarTeclado);
+        const texto = await resposta.text();
 
-    modalAberto = { fechar };
-    botaoX.focus();
-  }
+        let dados = {};
 
-  // Cria uma linha da tabela usando os dados da API
-  function criarLinha(lote) {
-    const linha = document.createElement("div");
+        if (texto) {
 
-    linha.className =
-      "grid min-h-[48px] " +
-      "grid-cols-[1fr_1fr_1.2fr_180px] " +
-      "items-center border-b border-gray-300 " +
-      "text-center text-text";
+            try {
 
-    const produto = document.createElement("div");
-    produto.className = "flex flex-col px-2 py-2";
+                dados = JSON.parse(texto);
 
-    const nome = document.createElement("span");
-    nome.className = "text-sm font-bold";
-    nome.textContent = lote.produtoNome || "Produto sem nome";
+            } catch {
 
-    const codigo = document.createElement("span");
-    codigo.className = "text-xs text-text-secondary";
-    codigo.textContent = "Lote: " + (lote.codigo || "-");
+                throw new Error(
+                    "Resposta inválida do servidor."
+                );
+            }
+        }
 
-    produto.append(nome, codigo);
+        if (!resposta.ok) {
 
-    const quantidade = document.createElement("span");
-    quantidade.className = "px-2 text-sm font-semibold";
-    quantidade.textContent = formatarQuantidade(
-      lote.quantidadeDisponivel,
-      lote.unidadeMedida,
+            throw new Error(
+                dados.mensagem ||
+                dados.erro ||
+                `Erro HTTP ${resposta.status}`
+            );
+        }
+
+        return dados;
+    }
+
+    // FORMATAR DATA
+
+    function formatarData(valor) {
+
+        const data = String(valor || "")
+            .substring(0, 10);
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+            return "-";
+        }
+
+        const [ano, mes, dia] = data.split("-");
+
+        return `${dia}/${mes}/${ano}`;
+    }
+
+    // FORMATAR QUANTIDADE
+
+    function formatarQuantidade(quantidade, unidade) {
+
+        if (
+            quantidade === null ||
+            quantidade === undefined ||
+            quantidade === ""
+        ) {
+            return "-";
+        }
+
+        // COMPATIBILIDADE COM DECIMAL128
+
+        if (
+            typeof quantidade === "object" &&
+            "$numberDecimal" in quantidade
+        ) {
+            quantidade = quantidade.$numberDecimal;
+        }
+
+        const numero = Number(quantidade);
+
+        if (!Number.isFinite(numero)) {
+            return "-";
+        }
+
+        const valor = numero.toLocaleString("pt-BR", {
+            maximumFractionDigits: 6
+        });
+
+        return `${valor} ${unidade || ""}`.trim();
+    }
+
+    // CALCULAR DIAS RESTANTES
+
+    function calcularDiasRestantes(dataISO) {
+
+        const data = String(dataISO || "")
+            .substring(0, 10);
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+            return null;
+        }
+
+        const [ano, mes, dia] =
+            data.split("-").map(Number);
+
+        const destino = Date.UTC(
+            ano,
+            mes - 1,
+            dia
+        );
+
+        // DATA ATUAL NO FUSO DE SÃO PAULO
+
+        const partes = new Intl.DateTimeFormat(
+            "en-US",
+            {
+                timeZone: "America/Sao_Paulo",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+            }
+        ).formatToParts(new Date());
+
+        const obter = (tipo) => Number(
+            partes.find(parte => parte.type === tipo).value
+        );
+
+        const hoje = Date.UTC(
+            obter("year"),
+            obter("month") - 1,
+            obter("day")
+        );
+
+        return Math.round(
+            (destino - hoje) / 86400000
+        );
+    }
+
+    // IDENTIFICAR SITUAÇÃO DO LOTE
+
+    function obterSituacao(lote) {
+
+        const dias = calcularDiasRestantes(
+            lote.dataValidade
+        );
+
+        if (dias === null) {
+            return "Data não disponível";
+        }
+
+        if (dias < 0) {
+            return `Vencido há ${Math.abs(dias)} dia(s)`;
+        }
+
+        if (dias === 0) {
+            return "Vence hoje";
+        }
+
+        if (dias === 1) {
+            return "Vence amanhã";
+        }
+
+        return `Vence em ${dias} dias`;
+    }
+
+    // MENSAGENS DE ERRO
+
+    function mostrarErro(texto) {
+
+        mensagem.textContent = texto;
+
+        mensagem.classList.remove("hidden");
+    }
+
+    function limparErro() {
+
+        mensagem.textContent = "";
+
+        mensagem.classList.add("hidden");
+    }
+
+    // MOSTRAR MENSAGEM NA TABELA
+
+    function mostrarMensagemTabela(texto) {
+
+        tabela.replaceChildren();
+
+        const linha = document.createElement("tr");
+        const celula = document.createElement("td");
+
+        celula.colSpan = 5;
+
+        celula.className =
+            "px-3 py-6 text-center text-text-secondary";
+
+        celula.textContent = texto;
+
+        linha.appendChild(celula);
+        tabela.appendChild(linha);
+    }
+
+    // CRIAR CÉLULA
+
+    function criarCelula(linha, texto, centralizar = false) {
+
+        const celula = document.createElement("td");
+
+        celula.className = centralizar
+            ? "px-3 py-3 text-center font-semibold"
+            : "px-3 py-3 font-semibold";
+
+        celula.textContent = texto ?? "-";
+
+        linha.appendChild(celula);
+
+        return celula;
+    }
+
+    // CRIAR TEXTO DO MODAL
+
+    function criarTexto(tag, texto, classes) {
+
+        const elemento = document.createElement(tag);
+
+        elemento.textContent = texto;
+        elemento.className = classes;
+
+        return elemento;
+    }
+
+    // MODAL DE DETALHES DO LOTE
+
+    function abrirModalDetalhes(lote, botaoOrigem) {
+
+        // EVITAR DOIS MODAIS ABERTOS
+
+        if (modalAberto) {
+            modalAberto.fechar();
+        }
+
+        // FUNDO ESCURECIDO
+
+        const overlay = document.createElement("div");
+
+        overlay.className =
+            "fixed inset-0 z-50 flex items-center " +
+            "justify-center bg-black/50 p-4";
+
+        // JANELA DO MODAL
+
+        const modal = document.createElement("section");
+
+        modal.className =
+            "w-full max-w-[480px] max-h-[90vh] " +
+            "overflow-y-auto rounded-lg bg-white p-6 shadow-lg";
+
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+
+        // TÍTULO E BOTÃO FECHAR
+
+        const cabecalho = document.createElement("div");
+
+        cabecalho.className =
+            "mb-5 flex items-center justify-between gap-4";
+
+        const titulo = criarTexto(
+            "h2",
+            "Detalhes do lote",
+            "text-lg font-semibold text-text"
+        );
+
+        titulo.id = "titulo-modal-vencimento";
+
+        modal.setAttribute(
+            "aria-labelledby",
+            titulo.id
+        );
+
+        const botaoX = document.createElement("button");
+
+        botaoX.type = "button";
+        botaoX.textContent = "×";
+
+        botaoX.className =
+            "cursor-pointer text-2xl text-text-secondary";
+
+        botaoX.setAttribute(
+            "aria-label",
+            "Fechar detalhes"
+        );
+
+        cabecalho.append(titulo, botaoX);
+
+        // DESCRIÇÃO
+
+        const descricao = criarTexto(
+            "p",
+            "Informações do lote próximo ao vencimento.",
+            "mb-5 text-xs text-text-secondary"
+        );
+
+        // SITUAÇÃO DO VENCIMENTO
+
+        const situacao = obterSituacao(lote);
+
+        const status = criarTexto(
+            "p",
+            situacao,
+            "mb-4 text-sm font-semibold text-text"
+        );
+
+        // ÁREA DAS INFORMAÇÕES
+
+        const informacoes = document.createElement("div");
+
+        informacoes.className =
+            "rounded-md bg-[#e9ebee] px-4 py-2";
+
+        // ADICIONAR INFORMAÇÃO AO MODAL
+
+        function adicionarCampo(rotulo, valor) {
+
+            const linha = document.createElement("div");
+
+            linha.className =
+                "flex items-start justify-between gap-4 " +
+                "border-b border-gray-300 py-3";
+
+            const nome = criarTexto(
+                "span",
+                rotulo,
+                "text-xs text-text-secondary"
+            );
+
+            const conteudo = criarTexto(
+                "strong",
+                valor ?? "-",
+                "break-words text-right text-xs font-semibold text-text"
+            );
+
+            linha.append(nome, conteudo);
+
+            informacoes.appendChild(linha);
+        }
+
+        // DADOS DO LOTE
+
+        adicionarCampo(
+            "Produto",
+            lote.produtoNome || "Produto sem nome"
+        );
+
+        adicionarCampo(
+            "Código do lote",
+            lote.codigo || "-"
+        );
+
+        adicionarCampo(
+            "Quantidade disponível",
+            formatarQuantidade(
+                lote.quantidadeDisponivel,
+                lote.unidadeMedida
+            )
+        );
+
+        adicionarCampo(
+            "Data de validade",
+            formatarData(lote.dataValidade)
+        );
+
+        adicionarCampo(
+            "Situação",
+            situacao
+        );
+
+        // BOTÃO FECHAR
+
+        const rodape = document.createElement("div");
+
+        rodape.className = "mt-6 flex justify-end";
+
+        const botaoFechar =
+            document.createElement("button");
+
+        botaoFechar.type = "button";
+        botaoFechar.textContent = "Fechar";
+
+        botaoFechar.className =
+            "cursor-pointer rounded bg-primary-dark " +
+            "px-5 py-2 text-xs font-semibold text-white";
+
+        rodape.appendChild(botaoFechar);
+
+        // MONTAR MODAL
+
+        modal.append(
+            cabecalho,
+            descricao,
+            status,
+            informacoes,
+            rodape
+        );
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // BLOQUEAR ROLAGEM DO FUNDO
+
+        const overflowAnterior =
+            document.body.style.overflow;
+
+        document.body.style.overflow = "hidden";
+
+        // FECHAR MODAL
+
+        function fechar() {
+
+            document.removeEventListener(
+                "keydown",
+                tratarTeclado
+            );
+
+            overlay.remove();
+
+            document.body.style.overflow =
+                overflowAnterior;
+
+            modalAberto = null;
+
+            if (
+                botaoOrigem &&
+                botaoOrigem.isConnected
+            ) {
+                botaoOrigem.focus();
+            }
+        }
+
+        // TRATAR TECLADO
+
+        function tratarTeclado(evento) {
+
+            if (evento.key === "Escape") {
+
+                fechar();
+                return;
+            }
+
+            // MANTER FOCO NO MODAL
+
+            if (evento.key === "Tab") {
+
+                const primeiro = botaoX;
+                const ultimo = botaoFechar;
+
+                if (
+                    evento.shiftKey &&
+                    document.activeElement === primeiro
+                ) {
+
+                    evento.preventDefault();
+                    ultimo.focus();
+
+                } else if (
+                    !evento.shiftKey &&
+                    document.activeElement === ultimo
+                ) {
+
+                    evento.preventDefault();
+                    primeiro.focus();
+                }
+            }
+        }
+
+        // EVENTOS DO MODAL
+
+        botaoX.addEventListener("click", fechar);
+        botaoFechar.addEventListener("click", fechar);
+
+        overlay.addEventListener("click", (evento) => {
+
+            if (evento.target === overlay) {
+                fechar();
+            }
+        });
+
+        document.addEventListener(
+            "keydown",
+            tratarTeclado
+        );
+
+        modalAberto = { fechar };
+
+        botaoX.focus();
+    }
+
+    // CRIAR LINHA DA TABELA
+
+    function criarLinha(lote) {
+
+        const linha = document.createElement("tr");
+
+        // ESTILO IGUAL À TABELA DE TODOS OS LOTES
+
+        linha.className =
+            "border-b border-gray-300 bg-[#e9ebee] text-text";
+
+        // PRODUTO
+
+        criarCelula(
+            linha,
+            lote.produtoNome || "Produto não encontrado"
+        );
+
+        // CÓDIGO DO LOTE
+
+        criarCelula(
+            linha,
+            lote.codigo || "-"
+        );
+
+        // QUANTIDADE DISPONÍVEL
+
+        criarCelula(
+            linha,
+            formatarQuantidade(
+                lote.quantidadeDisponivel,
+                lote.unidadeMedida
+            ),
+            true
+        );
+
+        // VALIDADE
+
+        criarCelula(
+            linha,
+            formatarData(lote.dataValidade),
+            true
+        );
+
+        // AÇÕES
+
+        const celulaAcoes = document.createElement("td");
+
+        celulaAcoes.className =
+            "px-3 py-3 text-center";
+
+        const grupo = document.createElement("div");
+
+        grupo.className =
+            "flex items-center justify-center";
+
+        // BOTÃO DE DETALHES
+
+        const detalhes = document.createElement("button");
+
+        detalhes.type = "button";
+        detalhes.textContent = "Detalhes";
+
+        detalhes.className =
+            "cursor-pointer rounded px-3 py-1 " +
+            "text-xs font-semibold text-primary-dark " +
+            "hover:bg-primary-light";
+
+        detalhes.setAttribute(
+            "aria-label",
+            `Ver detalhes do lote ${lote.codigo || ""}`
+        );
+
+        detalhes.addEventListener("click", () => {
+
+            abrirModalDetalhes(lote, detalhes);
+        });
+
+        grupo.appendChild(detalhes);
+
+        celulaAcoes.appendChild(grupo);
+        linha.appendChild(celulaAcoes);
+
+        return linha;
+    }
+
+    // NORMALIZAR TEXTO DA PESQUISA
+
+    // IGNORA ACENTOS E LETRAS MAIÚSCULAS
+
+    function normalizarTexto(texto) {
+
+        return String(texto || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
+    }
+
+    // PESQUISAR PRODUTOS PELO NOME
+
+    function filtrarProdutos() {
+
+        // EVITAR ALTERAR A TABELA DURANTE O CARREGAMENTO
+
+        if (carregando || erroCarregamento) {
+            return;
+        }
+
+        // RECUPERAR O TEXTO PESQUISADO
+
+        const pesquisa = normalizarTexto(
+            campoPesquisa.value
+        );
+
+        // FILTRAR OS LOTES RETORNADOS PELA API
+
+        const lotesFiltrados = lotesCarregados.filter(
+            (lote) => {
+
+                const nomeProduto = normalizarTexto(
+                    lote.produtoNome
+                );
+
+                return nomeProduto.includes(pesquisa);
+            }
+        );
+
+        // LIMPAR TABELA
+
+        tabela.replaceChildren();
+
+        // NENHUM RESULTADO
+
+        if (lotesFiltrados.length === 0) {
+
+            mostrarMensagemTabela(
+                pesquisa
+                    ? "Nenhum produto encontrado com esse nome neste período."
+                    : "Nenhum lote encontrado para este período."
+            );
+
+            return;
+        }
+
+        // PREENCHER TABELA COM RESULTADOS FILTRADOS
+
+        const fragmento =
+            document.createDocumentFragment();
+
+        lotesFiltrados.forEach((lote) => {
+
+            fragmento.appendChild(
+                criarLinha(lote)
+            );
+        });
+
+        tabela.appendChild(fragmento);
+    }
+
+    // EVENTO DA BARRA DE PESQUISA
+
+    // FILTRA AUTOMATICAMENTE ENQUANTO DIGITA
+
+    campoPesquisa.addEventListener(
+        "input",
+        filtrarProdutos
     );
 
-    const validade = document.createElement("span");
-    validade.className = "px-2 text-sm font-bold";
-    validade.textContent = formatarData(lote.dataValidade);
+    // ATUALIZAR BOTÕES DOS FILTROS
 
-    const acoes = document.createElement("div");
-    acoes.className = "flex justify-center";
+    function selecionarFiltro(botaoAtivo) {
 
-    const detalhes = document.createElement("button");
-    detalhes.type = "button";
-    detalhes.textContent = "Detalhes";
+        botoes.forEach((botao) => {
 
-    detalhes.className =
-      "cursor-pointer px-2 py-1 text-xs " +
-      "font-semibold text-primary hover:underline";
+            botao.classList.remove(
+                "bg-primary-dark",
+                "text-white"
+            );
 
-    detalhes.addEventListener("click", () => {
-      abrirModalDetalhes(lote, detalhes);
-    });
+            botao.classList.add(
+                "bg-[#e9ebee]",
+                "text-text"
+            );
 
-    acoes.appendChild(detalhes);
-    linha.append(produto, quantidade, validade, acoes);
+            botao.setAttribute(
+                "aria-pressed",
+                "false"
+            );
+        });
 
-    return linha;
-  }
+        botaoAtivo.classList.remove(
+            "bg-[#e9ebee]",
+            "text-text"
+        );
 
-  // Atualiza a aparência dos botões de filtro
-  function selecionarFiltro(botaoAtivo) {
+        botaoAtivo.classList.add(
+            "bg-primary-dark",
+            "text-white"
+        );
+
+        botaoAtivo.setAttribute(
+            "aria-pressed",
+            "true"
+        );
+    }
+
+    // CARREGAR LOTES AUTENTICADOS
+
+    async function carregarLotes(dias) {
+
+        // CANCELAR REQUISIÇÃO ANTERIOR
+
+        if (requisicaoAtual) {
+            requisicaoAtual.abort();
+        }
+
+        const controlador = new AbortController();
+
+        requisicaoAtual = controlador;
+
+        // FECHAR MODAL ABERTO
+
+        if (modalAberto) {
+            modalAberto.fechar();
+        }
+
+        // LIMPAR DADOS ANTERIORES
+
+        lotesCarregados = [];
+
+        carregando = true;
+        erroCarregamento = false;
+
+        limparErro();
+
+        mostrarMensagemTabela(
+            "Carregando lotes..."
+        );
+
+        try {
+
+            // CONSULTAR API COM TOKEN DE AUTENTICAÇÃO
+
+            const resposta =
+                await requisicaoAutenticada(
+                    `${API_URL}?dias=${dias}`,
+                    controlador.signal
+                );
+
+            const dados =
+                await lerResposta(resposta);
+
+            // IGNORAR REQUISIÇÕES CANCELADAS
+
+            if (controlador.signal.aborted) {
+                return;
+            }
+
+            // VALIDAR DADOS
+
+            if (!Array.isArray(dados.lotes)) {
+
+                throw new Error(
+                    "Resposta inválida do servidor."
+                );
+            }
+
+            // ARMAZENAR OS LOTES DO PERÍODO
+
+            lotesCarregados = dados.lotes;
+
+            // FINALIZAR CARREGAMENTO
+
+            carregando = false;
+
+            // APLICAR PESQUISA ATUAL
+
+            filtrarProdutos();
+
+        } catch (erro) {
+
+            // IGNORAR REQUISIÇÃO CANCELADA
+
+            if (
+                erro.name === "AbortError" ||
+                controlador.signal.aborted
+            ) {
+                return;
+            }
+
+            console.error(
+                "Erro ao carregar próximos vencimentos:",
+                erro
+            );
+
+            lotesCarregados = [];
+            erroCarregamento = true;
+
+            mostrarMensagemTabela(
+                "Não foi possível carregar os lotes."
+            );
+
+            mostrarErro(erro.message);
+
+        } finally {
+
+            // SOMENTE A REQUISIÇÃO MAIS RECENTE
+            // PODE ALTERAR O ESTADO DO CARREGAMENTO
+
+            if (requisicaoAtual === controlador) {
+
+                carregando = false;
+                requisicaoAtual = null;
+            }
+        }
+    }
+
+    // EVENTOS DOS CINCO FILTROS
+
     botoes.forEach((botao) => {
-      botao.classList.remove("bg-primary-dark", "text-white");
 
-      botao.classList.add("bg-gray-200", "text-text");
+        botao.addEventListener("click", () => {
 
-      botao.setAttribute("aria-pressed", "false");
+            const dias = Number(botao.dataset.dias);
+
+            // ACEITAR 1, 3, 7, 15 E 30 DIAS
+
+            if (!PERIODOS_VALIDOS.includes(dias)) {
+                return;
+            }
+
+            selecionarFiltro(botao);
+
+            carregarLotes(dias);
+        });
     });
 
-    botaoAtivo.classList.remove("bg-gray-200", "text-text");
+    // INICIALIZAÇÃO
 
-    botaoAtivo.classList.add("bg-primary-dark", "text-white");
+    // VERIFICAR SESSÃO
 
-    botaoAtivo.setAttribute("aria-pressed", "true");
-  }
+    if (!obterToken()) {
 
-  // Consulta a API Java
-  async function carregarLotes(dias) {
-    if (requisicaoAtual) {
-      requisicaoAtual.abort();
+        encerrarAcesso();
+        return;
     }
 
-    const controlador = new AbortController();
-    requisicaoAtual = controlador;
+    // INICIAR COM FILTRO HOJE
 
-    lista.replaceChildren();
-    mostrarMensagem("Carregando lotes...");
+    const filtroInicial =
+        document.querySelector('[data-dias="1"]');
 
-    try {
-      const resposta = await fetch(`${API_URL}?dias=${dias}`, {
-        method: "GET",
-        signal: controlador.signal,
-        cache: "no-store",
-      });
+    if (filtroInicial) {
 
-      if (!resposta.ok) {
-        throw new Error("Erro HTTP " + resposta.status);
-      }
+        selecionarFiltro(filtroInicial);
 
-      const dados = await resposta.json();
-
-      if (!Array.isArray(dados.lotes)) {
-        throw new Error("Resposta inválida da API");
-      }
-
-      if (dados.lotes.length === 0) {
-        mostrarMensagem("Nenhum lote encontrado para este período.");
-        return;
-      }
-
-      const fragmento = document.createDocumentFragment();
-
-      dados.lotes.forEach((lote) => {
-        fragmento.appendChild(criarLinha(lote));
-      });
-
-      lista.appendChild(fragmento);
-      esconderMensagem();
-    } catch (erro) {
-      if (erro.name === "AbortError") {
-        return;
-      }
-
-      console.error("Erro ao carregar lotes:", erro);
-
-      mostrarMensagem(
-        "Não foi possível carregar os lotes. " +
-          "Verifique se o backend está em execução.",
-      );
-    } finally {
-      if (requisicaoAtual === controlador) {
-        requisicaoAtual = null;
-      }
+        carregarLotes(1);
     }
-  }
-
-  // Eventos dos filtros
-  botoes.forEach((botao) => {
-    botao.addEventListener("click", () => {
-      const dias = Number(botao.dataset.dias);
-
-      selecionarFiltro(botao);
-      carregarLotes(dias);
-    });
-  });
-
-  // Carrega inicialmente os próximos 7 dias
-  const filtroInicial = document.querySelector('[data-dias="7"]');
-
-  if (filtroInicial) {
-    selecionarFiltro(filtroInicial);
-    carregarLotes(7);
-  }
 });
