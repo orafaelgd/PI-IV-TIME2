@@ -16,6 +16,8 @@ import org.bson.types.ObjectId;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.DateTimeException;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -47,16 +49,16 @@ public class HistoricoDespService {
 
     public HistoricoDespService(MongoDatabase banco) {
 
-        this.movimentacoes =
+        movimentacoes =
             banco.getCollection("movimentacoes");
 
-        this.lotes =
+        lotes =
             banco.getCollection("lotes");
 
-        this.itens =
+        itens =
             banco.getCollection("itens");
 
-        this.usuarios =
+        usuarios =
             banco.getCollection("users");
     }
 
@@ -75,8 +77,9 @@ public class HistoricoDespService {
         // VALIDAR USUÁRIO
 
         if (usuarioId == null) {
+
             throw new IllegalArgumentException(
-                "Usuario nao identificado."
+                "Usuário não identificado."
             );
         }
 
@@ -87,8 +90,9 @@ public class HistoricoDespService {
             limite < 1 ||
             limite > 100
         ) {
+
             throw new IllegalArgumentException(
-                "Paginacao invalida."
+                "Paginação inválida."
             );
         }
 
@@ -99,6 +103,7 @@ public class HistoricoDespService {
             fim != null &&
             inicio.isAfter(fim)
         ) {
+
             throw new IllegalArgumentException(
                 "Data inicial maior que a final."
             );
@@ -110,27 +115,30 @@ public class HistoricoDespService {
             motivo != null &&
             !MOTIVOS.contains(motivo)
         ) {
+
             throw new IllegalArgumentException(
-                "Motivo invalido."
+                "Motivo inválido."
             );
         }
 
-        // VALIDAR DESLOCAMENTO
+        // CALCULAR PAGINAÇÃO
 
         long deslocamento =
-            ((long) pagina - 1) * limite;
+            ((long) pagina - 1L) * limite;
 
         if (deslocamento > Integer.MAX_VALUE) {
+
             throw new IllegalArgumentException(
-                "Pagina invalida."
+                "Página inválida."
             );
         }
 
-        // FILTROS DAS MOVIMENTAÇÕES
+        // FILTROS INICIAIS
 
         List<Bson> filtros = new ArrayList<>();
 
-        // Consulta apenas desperdícios quando solicitado
+        // SOMENTE MOVIMENTAÇÕES DE DESPERDÍCIO
+
         if (somenteDesperdicio) {
 
             filtros.add(
@@ -142,7 +150,7 @@ public class HistoricoDespService {
             );
         }
 
-        // FILTRO DE DATA INICIAL
+        // DATA INICIAL
 
         if (inicio != null) {
 
@@ -157,23 +165,35 @@ public class HistoricoDespService {
             );
         }
 
-        // FILTRO DE DATA FINAL
+        // DATA FINAL
 
         if (fim != null) {
 
-            filtros.add(
-                Filters.lt(
-                    "dataMovimentacao",
-                    Date.from(
-                        fim.plusDays(1)
-                            .atStartOfDay(FUSO)
-                            .toInstant()
+            try {
+
+                filtros.add(
+                    Filters.lt(
+                        "dataMovimentacao",
+                        Date.from(
+                            fim.plusDays(1)
+                                .atStartOfDay(FUSO)
+                                .toInstant()
+                        )
                     )
-                )
-            );
+                );
+
+            } catch (
+                DateTimeException |
+                ArithmeticException erro
+            ) {
+
+                throw new IllegalArgumentException(
+                    "Data final inválida."
+                );
+            }
         }
 
-        // FILTRO DE MOTIVO
+        // MOTIVO
 
         if (motivo != null) {
 
@@ -185,11 +205,12 @@ public class HistoricoDespService {
             );
         }
 
-        // ETAPAS DA CONSULTA
+        // PIPELINE DO MONGODB
 
         List<Bson> consulta = new ArrayList<>();
 
-        // Aplica os filtros da movimentação
+        // APLICAR FILTROS
+
         if (!filtros.isEmpty()) {
 
             consulta.add(
@@ -199,8 +220,9 @@ public class HistoricoDespService {
             );
         }
 
-        // BUSCAR LOTE DA MOVIMENTAÇÃO
+        // VINCULAR MOVIMENTAÇÃO AO LOTE
 
+        // movimentacoes.loteId -> lotes._id
         consulta.add(
             Aggregates.lookup(
                 lotes.getNamespace().getCollectionName(),
@@ -210,14 +232,15 @@ public class HistoricoDespService {
             )
         );
 
-        // Exige que o lote exista
+        // Descarta movimentações sem lote correspondente
         consulta.add(
             Aggregates.unwind("$lote")
         );
 
-        // FILTRAR PELA CONTA
+        // FILTRAR LOTE PELO USUÁRIO
 
-        // O lote precisa pertencer ao usuário autenticado
+        // O lote obrigatoriamente deve pertencer
+        // ao usuário identificado pela sessão.
         consulta.add(
             Aggregates.match(
                 Filters.eq(
@@ -227,9 +250,9 @@ public class HistoricoDespService {
             )
         );
 
-        // VERIFICAR PRODUTO DA CONTA
+        // VINCULAR LOTE AO PRODUTO
 
-        // Busca o produto vinculado ao lote
+        // lotes.itemId -> itens._id
         consulta.add(
             Aggregates.lookup(
                 itens.getNamespace().getCollectionName(),
@@ -239,11 +262,15 @@ public class HistoricoDespService {
             )
         );
 
+        // Descarta movimentações sem produto
         consulta.add(
             Aggregates.unwind("$produto")
         );
 
-        // Não mistura produtos de outros usuários
+        // FILTRAR PRODUTO PELO USUÁRIO
+
+        // O produto também deve pertencer
+        // à mesma conta autenticada.
         consulta.add(
             Aggregates.match(
                 Filters.eq(
@@ -253,7 +280,7 @@ public class HistoricoDespService {
             )
         );
 
-        // CONTAR REGISTROS DA CONTA
+        // CONTAR APENAS OS REGISTROS DA CONTA
 
         List<Bson> consultaTotal =
             new ArrayList<>(consulta);
@@ -262,9 +289,9 @@ public class HistoricoDespService {
             Aggregates.count("total")
         );
 
-        Document contagem = movimentacoes
-            .aggregate(consultaTotal)
-            .first();
+        Document contagem =
+            movimentacoes.aggregate(consultaTotal)
+                .first();
 
         long total = contagem == null
             ? 0L
@@ -273,20 +300,18 @@ public class HistoricoDespService {
                 Number.class
             ).longValue();
 
-        // PAGINAR REGISTROS DA CONTA
+        // CONSULTAR REGISTROS PAGINADOS
 
         List<Bson> consultaPagina =
             new ArrayList<>(consulta);
 
-        // Mostra primeiro as movimentações recentes
+        // Registros mais recentes primeiro
         consultaPagina.add(
             Aggregates.sort(
-                Sorts.orderBy(
-                    Sorts.descending(
-                        "dataMovimentacao",
-                        "criadoEm"
-                    ),
-                    Sorts.descending("_id")
+                Sorts.descending(
+                    "dataMovimentacao",
+                    "criadoEm",
+                    "_id"
                 )
             )
         );
@@ -301,78 +326,63 @@ public class HistoricoDespService {
             Aggregates.limit(limite)
         );
 
-        // BUSCAR RESULTADOS
-
-        List<Document> movimentacoesDaConta =
+        List<Document> resultados =
             movimentacoes.aggregate(consultaPagina)
                 .into(new ArrayList<>());
 
-        List<Document> registros =
-            new ArrayList<>();
+        // BUSCAR NOME DA CONTA
 
-        // MONTAR HISTÓRICO
+        Document conta = usuarios.find(
+            Filters.eq("_id", usuarioId)
+        ).first();
 
-        for (
-            Document movimentacao :
-                movimentacoesDaConta
-        ) {
+        String nomeConta = conta == null
+            ? "Não informado"
+            : conta.getString("nome");
 
-            Document lote =
-                movimentacao.get(
-                    "lote",
-                    Document.class
+        if (nomeConta == null || nomeConta.isBlank()) {
+
+            nomeConta = "Não informado";
+        }
+
+        // MONTAR RESULTADOS
+
+        List<Document> registros = new ArrayList<>();
+
+        for (Document movimentacao : resultados) {
+
+            Document lote = movimentacao.get(
+                "lote",
+                Document.class
+            );
+
+            Document produto = movimentacao.get(
+                "produto",
+                Document.class
+            );
+
+            // VERIFICAÇÃO ADICIONAL
+
+            // A consulta já verifica a propriedade
+            // no MongoDB. Esta verificação evita
+            // montar registros inconsistentes.
+            if (
+                lote == null ||
+                produto == null ||
+                !usuarioId.equals(
+                    lote.get("usuarioId")
+                ) ||
+                !usuarioId.equals(
+                    produto.get("usuarioId")
+                )
+            ) {
+
+                throw new IllegalStateException(
+                    "Registro com vínculo de usuário inconsistente."
                 );
-
-            Document produto =
-                movimentacao.get(
-                    "produto",
-                    Document.class
-                );
-
-            String origem =
-                movimentacao.getString("origem");
-
-            String responsavel =
-                "Não informado";
-
-            // IDENTIFICAR RESPONSÁVEL
-
-            if ("AUTOMATICA".equals(origem)) {
-
-                responsavel = "Sistema";
-
-            } else {
-
-                // Consulta o responsável somente quando
-                // o registro pertence ao usuário autenticado
-                Object idResponsavel =
-                    movimentacao.get("usuarioId");
-
-                if (
-                    usuarioId.equals(idResponsavel) ||
-                    usuarioId.toHexString().equals(
-                        idResponsavel
-                    )
-                ) {
-
-                    Document usuario = usuarios.find(
-                        Filters.eq(
-                            "_id",
-                            usuarioId
-                        )
-                    ).first();
-
-                    if (
-                        usuario != null &&
-                        usuario.getString("nome") != null
-                    ) {
-                        responsavel =
-                            usuario.getString("nome");
-                    }
-                }
             }
 
-            // VERIFICAR TIPO
+            // TIPO DA MOVIMENTAÇÃO
 
             String tipo =
                 movimentacao.getString("tipo");
@@ -381,20 +391,64 @@ public class HistoricoDespService {
                 "VENCIMENTO".equals(tipo) ||
                 "AJUSTE_SAIDA".equals(tipo);
 
-            Date data =
-                movimentacao.getDate(
-                    "dataMovimentacao"
-                );
+            // RESPONSÁVEL PELO REGISTRO
 
-            // RECUPERAR IDENTIFICADORES
+            String origem =
+                movimentacao.getString("origem");
+
+            String responsavel =
+                "Não informado";
+
+            if ("AUTOMATICA".equals(origem)) {
+
+                responsavel = "Sistema";
+
+            } else {
+
+                // Identifica quem realizou o registro.
+                // Esse campo não define a propriedade
+                // do lote ou do produto.
+                Object idResponsavel =
+                    movimentacao.get("usuarioId");
+
+                if (idResponsavel != null) {
+
+                    Document responsavelEncontrado =
+                        buscarUsuarioPorId(
+                            idResponsavel
+                        );
+
+                    if (
+                        responsavelEncontrado != null &&
+                        responsavelEncontrado.getString("nome") != null
+                    ) {
+
+                        responsavel =
+                            responsavelEncontrado.getString("nome");
+                    }
+
+                } else {
+
+                    // Compatibilidade com movimentações
+                    // antigas sem responsável informado
+                    responsavel = nomeConta;
+                }
+            }
+
+            // DADOS DA MOVIMENTAÇÃO
 
             Object loteId =
                 movimentacao.get("loteId");
 
-            Object itemId =
+            Object produtoId =
                 lote.get("itemId");
 
-            // MONTAR REGISTRO
+            Date dataOcorrencia =
+                movimentacao.getDate(
+                    "dataMovimentacao"
+                );
+
+            // CRIAR REGISTRO
 
             Document registro = new Document()
                 .append(
@@ -413,7 +467,7 @@ public class HistoricoDespService {
                 )
                 .append(
                     "produtoId",
-                    converterId(itemId)
+                    converterId(produtoId)
                 )
                 .append(
                     "produtoNome",
@@ -443,11 +497,11 @@ public class HistoricoDespService {
                 )
                 .append(
                     "dataOcorrencia",
-                    dataIso(data)
+                    converterData(dataOcorrencia)
                 )
                 .append(
                     "criadoEm",
-                    dataIso(
+                    converterData(
                         movimentacao.getDate("criadoEm")
                     )
                 )
@@ -466,7 +520,7 @@ public class HistoricoDespService {
                 .append(
                     "valorPerdaCentavos",
                     desperdicio
-                        ? numeroSimples(
+                        ? converterNumero(
                             movimentacao.get(
                                 "valorPerdaCentavos"
                             )
@@ -477,16 +531,71 @@ public class HistoricoDespService {
             registros.add(registro);
         }
 
-        // RETORNAR RESULTADO
+        // LOG PARA CONFERÊNCIA
+
+        System.out.println(
+            "HISTÓRICO - Usuário: " +
+            usuarioId.toHexString() +
+            " | Registros encontrados: " +
+            total
+        );
+
+        // RESPOSTA PARA O FRONTEND
 
         return new Document()
-            .append("itens", registros)
-            .append("total", total)
-            .append("pagina", pagina)
-            .append("limite", limite);
+            .append(
+                "itens",
+                registros
+            )
+            .append(
+                "total",
+                total
+            )
+            .append(
+                "pagina",
+                pagina
+            )
+            .append(
+                "limite",
+                limite
+            );
     }
 
-    // CONVERTER ID
+    // BUSCAR RESPONSÁVEL
+
+    private Document buscarUsuarioPorId(
+        Object identificador
+    ) {
+
+        if (identificador instanceof ObjectId) {
+
+            return usuarios.find(
+                Filters.eq(
+                    "_id",
+                    identificador
+                )
+            ).first();
+        }
+
+        if (
+            identificador instanceof String &&
+            ObjectId.isValid((String) identificador)
+        ) {
+
+            return usuarios.find(
+                Filters.eq(
+                    "_id",
+                    new ObjectId(
+                        (String) identificador
+                    )
+                )
+            ).first();
+        }
+
+        return null;
+    }
+
+    // CONVERTER IDENTIFICADOR
 
     private static String converterId(Object valor) {
 
@@ -513,9 +622,13 @@ public class HistoricoDespService {
 
         if (valor instanceof Decimal128) {
 
-            return ((Decimal128) valor)
-                .bigDecimalValue()
-                .toPlainString();
+            Decimal128 decimal =
+                (Decimal128) valor;
+
+            return decimal.isFinite()
+                ? decimal.bigDecimalValue()
+                    .toPlainString()
+                : null;
         }
 
         if (valor instanceof BigDecimal) {
@@ -529,24 +642,26 @@ public class HistoricoDespService {
 
     // CONVERTER DATA
 
-    private static String dataIso(Date data) {
+    private static String converterData(Date data) {
 
         return data == null
             ? null
             : data.toInstant().toString();
     }
 
-    // CONVERTER VALOR NUMÉRICO
+    // CONVERTER NÚMERO
 
-    private static Object numeroSimples(
-        Object valor
-    ) {
+    private static Object converterNumero(Object valor) {
 
         if (valor instanceof Decimal128) {
 
-            return ((Decimal128) valor)
-                .bigDecimalValue()
-                .toPlainString();
+            Decimal128 decimal =
+                (Decimal128) valor;
+
+            return decimal.isFinite()
+                ? decimal.bigDecimalValue()
+                    .toPlainString()
+                : null;
         }
 
         if (valor instanceof BigDecimal) {
