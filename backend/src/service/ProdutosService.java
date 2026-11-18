@@ -1,3 +1,5 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
+
 package service;
 
 import java.math.BigDecimal;
@@ -22,13 +24,15 @@ import static com.mongodb.client.model.Filters.*;
 
 public class ProdutosService {
 
-    // Coleções utilizadas no MongoDB.
+    // COLEÇÕES DO MONGODB
+
     private final MongoCollection<Document> itens;
     private final MongoCollection<Document> categorias;
     private final MongoCollection<Document> lotes;
     private final MongoCollection<Document> movimentacoes;
 
-    // Exceção utilizada quando o produto não existe.
+    // TRATAMENTO DE ERROS
+
     public static class ProdutoNaoEncontradoException
         extends RuntimeException {
 
@@ -37,7 +41,6 @@ public class ProdutosService {
         }
     }
 
-    // Exceção utilizada para impedir exclusões indevidas.
     public static class ConflitoExclusaoException
         extends RuntimeException {
 
@@ -46,7 +49,8 @@ public class ProdutosService {
         }
     }
 
-    // Construtor que recebe as coleções do banco.
+    // CONSTRUTOR
+
     public ProdutosService(
         MongoCollection<Document> itens,
         MongoCollection<Document> categorias,
@@ -61,20 +65,21 @@ public class ProdutosService {
 
     // CATEGORIAS
 
-    // Retorna todas as categorias cadastradas.
-    public Document listarCategorias() {
+    // Lista somente as categorias do usuário autenticado
+    public Document listarCategorias(ObjectId usuarioId) {
 
         List<Document> lista = new ArrayList<>();
 
-        for (Document categoria : categorias.find()) {
+        for (Document categoria : categorias.find(
+            eq("usuarioId", usuarioId)
+        )) {
 
             String nome = categoria.getString("nome");
+            ObjectId id = categoria.getObjectId("_id");
 
-            if (nome == null || nome.isBlank()) {
+            if (nome == null || nome.isBlank() || id == null) {
                 continue;
             }
-
-            ObjectId id = categoria.getObjectId("_id");
 
             lista.add(
                 new Document()
@@ -86,7 +91,7 @@ public class ProdutosService {
         return new Document("categorias", lista);
     }
 
-    // Gera um código padronizado para a categoria.
+    // Gera um código padronizado para a categoria
     private static String gerarCodigo(String nome) {
 
         String texto = Normalizer.normalize(
@@ -100,38 +105,57 @@ public class ProdutosService {
             .replaceAll("^-|-$", "");
     }
 
-    // Busca a categoria ou cadastra uma nova.
-    private ObjectId buscarOuCriarCategoria(String nome) {
+    // BUSCAR OU CRIAR CATEGORIA
 
-        String codigo = gerarCodigo(nome);
+    // Cada usuário possui suas próprias categorias
+    private ObjectId buscarOuCriarCategoria(
+        String nome,
+        ObjectId usuarioId
+    ) {
 
-        if (codigo.isEmpty()) {
+        String codigoBase = gerarCodigo(nome);
+
+        if (codigoBase.isEmpty()) {
             throw new IllegalArgumentException(
                 "Categoria invalida."
             );
         }
 
+        // Acrescenta o ID do usuário ao código
+        // Evita conflitos com categorias de outras contas
+        String codigo = usuarioId.toHexString()
+            + "-" + codigoBase;
+
+        // Busca a categoria somente na conta atual
         Document categoria = categorias.find(
-            eq("codigo", codigo)
+            and(
+                eq("usuarioId", usuarioId),
+                eq("codigo", codigo)
+            )
         ).first();
 
-        // Busca também pelo nome, ignorando maiúsculas.
+        // Verifica também o nome da categoria
         if (categoria == null) {
+
             categoria = categorias.find(
-                regex(
-                    "nome",
-                    "^" + Pattern.quote(nome) + "$",
-                    "i"
+                and(
+                    eq("usuarioId", usuarioId),
+                    regex(
+                        "nome",
+                        "^" + Pattern.quote(nome) + "$",
+                        "i"
+                    )
                 )
             ).first();
         }
 
-        // Cadastra a categoria se ela ainda não existir.
+        // Cadastra a categoria quando ela não existe
         if (categoria == null) {
 
             categoria = new Document()
                 .append("nome", nome)
                 .append("codigo", codigo)
+                .append("usuarioId", usuarioId)
                 .append("criadoEm", new Date());
 
             categorias.insertOne(categoria);
@@ -140,8 +164,13 @@ public class ProdutosService {
         return categoria.getObjectId("_id");
     }
 
-    // Obtém o nome da categoria vinculada ao produto.
-    private String buscarNomeCategoria(Document produto) {
+    // BUSCAR NOME DA CATEGORIA
+
+    // Impede consultar categorias de outra conta
+    private String buscarNomeCategoria(
+        Document produto,
+        ObjectId usuarioId
+    ) {
 
         ObjectId categoriaId =
             produto.getObjectId("categoriaId");
@@ -151,7 +180,10 @@ public class ProdutosService {
         }
 
         Document categoria = categorias.find(
-            eq("_id", categoriaId)
+            and(
+                eq("_id", categoriaId),
+                eq("usuarioId", usuarioId)
+            )
         ).first();
 
         if (categoria == null) {
@@ -161,9 +193,9 @@ public class ProdutosService {
         return categoria.getString("nome");
     }
 
-    // VALIDAÇÃO DOS PRODUTOS
+    // CONVERSÃO DOS DADOS
 
-    // Obtém um campo de texto e remove espaços nas pontas.
+    // Recupera os campos de texto do formulário
     private static String obterTexto(
         Document documento,
         String campo
@@ -176,8 +208,13 @@ public class ProdutosService {
             : "";
     }
 
-    // Valida os dados antes de cadastrar ou atualizar.
-    private Document validarProduto(Document dados) {
+    // VALIDAÇÃO DOS PRODUTOS
+
+    // Valida as informações antes de salvar no banco
+    private Document validarProduto(
+        Document dados,
+        ObjectId usuarioId
+    ) {
 
         String nome = obterTexto(
             dados, "nomeProduto"
@@ -203,47 +240,50 @@ public class ProdutosService {
             dados, "observacao"
         );
 
-        // Valida o nome.
+        // VALIDAR NOME
+
         if (nome.isEmpty() || nome.length() > 150) {
             throw new IllegalArgumentException(
                 "Nome do produto invalido."
             );
         }
 
-        // Valida a categoria.
-        if (categoria.isEmpty() ||
-            categoria.length() > 100) {
+        // VALIDAR CATEGORIA
 
+        if (categoria.isEmpty() || categoria.length() > 100) {
             throw new IllegalArgumentException(
                 "Categoria invalida."
             );
         }
 
-        // Converte a quantidade para número.
+        // VALIDAR QUANTIDADE
+
         BigDecimal quantidade;
 
         try {
             quantidade = new BigDecimal(
                 quantidadeTexto.replace(",", ".")
             );
+
         } catch (NumberFormatException erro) {
             throw new IllegalArgumentException(
                 "Quantidade da unidade invalida."
             );
         }
 
-        // A quantidade precisa ser maior que zero.
-        if (quantidade.signum() <= 0 ||
+        if (
+            quantidade.signum() <= 0 ||
             quantidade.compareTo(
                 BigDecimal.valueOf(Double.MAX_VALUE)
-            ) > 0) {
-
+            ) > 0
+        ) {
             throw new IllegalArgumentException(
                 "Quantidade da unidade invalida."
             );
         }
 
-        // Unidades de medida aceitas.
+        // VALIDAR UNIDADE DE MEDIDA
+
         if (!Set.of("kg", "g", "l", "ml", "un")
             .contains(unidade)) {
 
@@ -252,29 +292,31 @@ public class ProdutosService {
             );
         }
 
-        // Status permitido.
-        if (!Set.of("ativo", "inativo")
-            .contains(status)) {
+        // VALIDAR STATUS
 
+        if (!Set.of("ativo", "inativo").contains(status)) {
             throw new IllegalArgumentException(
                 "Status invalido."
             );
         }
 
-        // Validação da observação.
-        if (observacao.isEmpty() ||
-            observacao.length() > 1000) {
+        // VALIDAR OBSERVAÇÃO
 
+        if (
+            observacao.isEmpty() ||
+            observacao.length() > 1000
+        ) {
             throw new IllegalArgumentException(
                 "Observacao invalida."
             );
         }
 
-        // Busca ou cadastra a categoria informada.
-        ObjectId categoriaId =
-            buscarOuCriarCategoria(categoria);
+        // VINCULAR CATEGORIA AO USUÁRIO
 
-        // Retorna os dados padronizados para o banco.
+        ObjectId categoriaId =
+            buscarOuCriarCategoria(categoria, usuarioId);
+
+        // Organiza os dados antes de salvar
         return new Document()
             .append("nome", nome)
             .append("categoriaId", categoriaId)
@@ -289,13 +331,20 @@ public class ProdutosService {
 
     // CADASTRAR PRODUTO
 
-    // Valida e cadastra um produto no MongoDB.
-    public Document cadastrarProduto(Document dados) {
+    public Document cadastrarProduto(
+        Document dados,
+        ObjectId usuarioId
+    ) {
 
-        Document produto = validarProduto(dados);
+        // Valida as informações recebidas
+        Document produto = validarProduto(dados, usuarioId);
+
+        // Identifica o dono do produto
+        produto.append("usuarioId", usuarioId);
 
         produto.append("criadoEm", new Date());
 
+        // Salva o produto na conta autenticada
         itens.insertOne(produto);
 
         return new Document()
@@ -309,13 +358,19 @@ public class ProdutosService {
             );
     }
 
-    // BUSCAR PRODUTO PELO ID
+    // BUSCAR PRODUTO DO USUÁRIO
 
-    // Busca o produto ou informa que ele não existe.
-    private Document encontrarProduto(ObjectId id) {
+    // Verifica se o produto pertence à conta autenticada
+    private Document encontrarProduto(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
         Document produto = itens.find(
-            eq("_id", id)
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            )
         ).first();
 
         if (produto == null) {
@@ -325,10 +380,14 @@ public class ProdutosService {
         return produto;
     }
 
-    // Retorna as informações de um produto específico.
-    public Document buscarProduto(ObjectId id) {
+    // BUSCAR PRODUTO PARA EDIÇÃO
 
-        Document produto = encontrarProduto(id);
+    public Document buscarProduto(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
+
+        Document produto = encontrarProduto(id, usuarioId);
 
         Document resposta = new Document()
             .append("id", id.toHexString())
@@ -338,7 +397,7 @@ public class ProdutosService {
             )
             .append(
                 "categoria",
-                buscarNomeCategoria(produto)
+                buscarNomeCategoria(produto, usuarioId)
             )
             .append(
                 "quantidadeUnidade",
@@ -364,22 +423,28 @@ public class ProdutosService {
 
     // ATUALIZAR PRODUTO
 
-    // Atualiza as informações de um produto existente.
     public void atualizarProduto(
         ObjectId id,
-        Document dados
+        Document dados,
+        ObjectId usuarioId
     ) {
 
-        // Verifica se o produto existe.
-        encontrarProduto(id);
+        // Confere se o produto pertence ao usuário
+        encontrarProduto(id, usuarioId);
 
-        // Valida os novos dados.
-        Document alteracoes = validarProduto(dados);
+        // Valida os novos dados
+        Document alteracoes = validarProduto(
+            dados, usuarioId
+        );
 
         alteracoes.append("atualizadoEm", new Date());
 
+        // Altera somente o produto da conta autenticada
         UpdateResult resultado = itens.updateOne(
-            eq("_id", id),
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            ),
             new Document("$set", alteracoes)
         );
 
@@ -388,12 +453,12 @@ public class ProdutosService {
         }
     }
 
-    // VERIFICAÇÃO DE LOTES E MOVIMENTAÇÕES
+    // CONSULTAR MOVIMENTAÇÕES
 
-    // Verifica se o produto possui movimentações registradas.
+    // Verifica movimentações diretamente no produto
+    // ou nos lotes vinculados a ele
     private boolean possuiMovimentacoes(ObjectId produtoId) {
 
-        // Busca movimentações vinculadas diretamente ao produto.
         if (movimentacoes.countDocuments(
             or(
                 eq("itemId", produtoId),
@@ -403,9 +468,9 @@ public class ProdutosService {
             return true;
         }
 
-        // Reúne os IDs dos lotes pertencentes ao produto.
         List<ObjectId> idsLotes = new ArrayList<>();
 
+        // Busca os lotes pertencentes ao produto
         for (Document lote : lotes.find(
             eq("itemId", produtoId)
         )) {
@@ -421,13 +486,15 @@ public class ProdutosService {
             return false;
         }
 
-        // Verifica movimentações vinculadas aos lotes.
+        // Verifica movimentações vinculadas aos lotes
         return movimentacoes.countDocuments(
             in("loteId", idsLotes)
         ) > 0;
     }
 
-    // Verifica se existem lotes vinculados ao produto.
+    // CONSULTAR LOTES
+
+    // Verifica se existem lotes vinculados ao produto
     private boolean possuiLotes(ObjectId produtoId) {
 
         return lotes.countDocuments(
@@ -437,10 +504,13 @@ public class ProdutosService {
 
     // VERIFICAR EXCLUSÃO
 
-    // Consulta se o produto pode ser excluído.
-    public Document verificarExclusao(ObjectId id) {
+    public Document verificarExclusao(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
-        encontrarProduto(id);
+        // Confere se o produto pertence ao usuário
+        encontrarProduto(id, usuarioId);
 
         boolean temMovimentacoes =
             possuiMovimentacoes(id);
@@ -453,7 +523,7 @@ public class ProdutosService {
 
         String mensagem;
 
-        // Produtos com histórico não podem ser excluídos.
+        // Impede excluir produtos com movimentações
         if (temMovimentacoes) {
 
             mensagem =
@@ -486,12 +556,15 @@ public class ProdutosService {
 
     // EXCLUIR PRODUTO
 
-    // Exclui apenas produtos sem lotes ou movimentações.
-    public void excluirProduto(ObjectId id) {
+    public void excluirProduto(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
-        encontrarProduto(id);
+        // Verifica o proprietário do produto
+        encontrarProduto(id, usuarioId);
 
-        // Confere novamente os vínculos antes de excluir.
+        // Não permite excluir produtos com histórico
         if (possuiMovimentacoes(id) || possuiLotes(id)) {
 
             throw new ConflitoExclusaoException(
@@ -501,8 +574,12 @@ public class ProdutosService {
             );
         }
 
+        // Exclui somente registros da conta atual
         DeleteResult resultado = itens.deleteOne(
-            eq("_id", id)
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            )
         );
 
         if (resultado.getDeletedCount() == 0) {
@@ -512,29 +589,32 @@ public class ProdutosService {
 
     // ALTERAR STATUS
 
-    // Permite ativar ou inativar um produto.
     public String alterarStatus(
         ObjectId id,
-        Document dados
+        Document dados,
+        ObjectId usuarioId
     ) {
 
-        encontrarProduto(id);
+        // Confere se o produto pertence ao usuário
+        encontrarProduto(id, usuarioId);
 
         String status = obterTexto(
             dados, "status"
         ).toLowerCase(Locale.ROOT);
 
-        // Aceita somente ativo ou inativo.
-        if (!Set.of("ativo", "inativo")
-            .contains(status)) {
-
+        // Valida o status informado
+        if (!Set.of("ativo", "inativo").contains(status)) {
             throw new IllegalArgumentException(
                 "Status invalido."
             );
         }
 
+        // Atualiza somente o produto do usuário
         UpdateResult resultado = itens.updateOne(
-            eq("_id", id),
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            ),
             new Document(
                 "$set",
                 new Document()
@@ -554,18 +634,21 @@ public class ProdutosService {
 
     // LISTAR PRODUTOS
 
-    // Lista produtos e calcula as informações do estoque.
-    public Document listarProdutos() {
+    // Retorna somente produtos do usuário autenticado
+    public Document listarProdutos(ObjectId usuarioId) {
 
         List<Document> listaProdutos = new ArrayList<>();
 
-        for (Document produto : itens.find()) {
+        // Filtra os produtos pelo ID do usuário
+        for (Document produto : itens.find(
+            eq("usuarioId", usuarioId)
+        )) {
 
             ObjectId produtoId =
                 produto.getObjectId("_id");
 
             String nomeCategoria =
-                buscarNomeCategoria(produto);
+                buscarNomeCategoria(produto, usuarioId);
 
             BigDecimal quantidadeUnidade =
                 obterDecimal(produto, "quantidadeUnidade");
@@ -581,7 +664,9 @@ public class ProdutosService {
 
             Date validadeMaisProxima = null;
 
-            // Consulta os lotes pertencentes ao produto.
+            // CALCULAR ESTOQUE DOS LOTES
+
+            // Consulta os lotes do produto selecionado
             for (Document lote : lotes.find(
                 eq("itemId", produtoId)
             )) {
@@ -601,18 +686,17 @@ public class ProdutosService {
                         lote, "custoTotalAquisicao"
                     );
 
-                // Ignora lotes sem estoque disponível.
+                // Ignora lotes sem quantidade disponível
                 if (quantidadeDisponivel.signum() <= 0) {
                     continue;
                 }
 
-                // Soma a quantidade disponível dos lotes.
                 quantidadeTotal = quantidadeTotal.add(
                     quantidadeDisponivel
                 );
 
-                // Calcula o custo do estoque pelo preço
-                // de aquisição proporcional de cada lote.
+                // CALCULAR PREÇO MÉDIO PONDERADO
+
                 if (
                     quantidadeInicial.signum() > 0 &&
                     lote.get("custoTotalAquisicao") != null
@@ -637,7 +721,8 @@ public class ProdutosService {
                         );
                 }
 
-                // Identifica a validade mais próxima.
+                // IDENTIFICAR VALIDADE MAIS PRÓXIMA
+
                 Date validade = lote.getDate(
                     "dataValidade"
                 );
@@ -653,7 +738,8 @@ public class ProdutosService {
                 }
             }
 
-            // Calcula o preço médio ponderado do estoque.
+            // CALCULAR PREÇO UNITÁRIO
+
             String precoUnitario = null;
 
             if (quantidadeComPreco.signum() > 0) {
@@ -665,7 +751,8 @@ public class ProdutosService {
                 ).toPlainString();
             }
 
-            // Converte a data de validade para texto.
+            // CONVERTER DATA DE VALIDADE
+
             String dataValidade = null;
 
             if (validadeMaisProxima != null) {
@@ -675,7 +762,8 @@ public class ProdutosService {
                     .toString();
             }
 
-            // Monta os dados enviados para a tela.
+            // ORGANIZAR RESPOSTA PARA O FRONTEND
+
             Document resultado = new Document()
                 .append(
                     "id",
@@ -726,7 +814,7 @@ public class ProdutosService {
 
     // CONVERSÃO DOS NÚMEROS DO MONGODB
 
-    // Converte diferentes formatos numéricos em BigDecimal.
+    // Converte os valores armazenados para BigDecimal
     private static BigDecimal obterDecimal(
         Document documento,
         String campo
@@ -734,17 +822,14 @@ public class ProdutosService {
 
         Object valor = documento.get(campo);
 
-        // Valores armazenados como Decimal128.
         if (valor instanceof Decimal128) {
             return ((Decimal128) valor).bigDecimalValue();
         }
 
-        // Valores numéricos convencionais.
         if (valor instanceof Number) {
             return new BigDecimal(valor.toString());
         }
 
-        // Valores armazenados como texto.
         if (valor instanceof String) {
 
             try {

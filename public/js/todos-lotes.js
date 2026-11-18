@@ -1,7 +1,13 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
 
 document.addEventListener("DOMContentLoaded", () => {
 
+    // CONFIGURAÇÕES
+
     const API = "http://localhost:8080/api";
+    const PAGINA_LOGIN = "login-usuario.html";
+
+    // ELEMENTOS DA TELA
 
     const tabela = document.getElementById("tabelaLotes");
     const mensagemErro = document.getElementById("mensagemErro");
@@ -13,38 +19,80 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalCancelar = document.getElementById("modalCancelar");
 
     let acaoModal = null;
+    let processando = false;
 
-    // ÍCONE ORIGINAL DA ENGRENAGEM
+    // AUTENTICAÇÃO
+
+    function obterToken() {
+        return sessionStorage.getItem("token");
+    }
+
+    // Limpa os dados locais e volta para o login
+    function encerrarAcesso() {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+        window.location.replace(PAGINA_LOGIN);
+    }
+
+    // Envia o token para o backend
+    async function requisicaoAutenticada(url, opcoes = {}) {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+            encerrarAcesso();
+            throw new Error("Sessão não encontrada.");
+        }
+
+        const headers = new Headers(opcoes.headers || {});
+        headers.set("Authorization", `Bearer ${token}`);
+
+        const resposta = await fetch(url, {
+            ...opcoes,
+            headers,
+            cache: "no-store"
+        });
+
+        if (resposta.status === 401) {
+            encerrarAcesso();
+            throw new Error("Sua sessão expirou. Faça login novamente.");
+        }
+
+        if (resposta.status === 403) {
+            throw new Error("Você não tem permissão para esta operação.");
+        }
+
+        return resposta;
+    }
+
+    // ÍCONE DE EDIÇÃO
+
     const engrenagem = `
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="22"
-            height="22"
+        <svg xmlns="http://www.w3.org/2000/svg"
+            width="22" height="22"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
             stroke-width="1.8"
-            aria-hidden="true"
-        >
-            <path
-                stroke-linecap="round"
+            aria-hidden="true">
+            <path stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.757.426 1.757 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.757-2.924 1.757-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.757-.426-1.757-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065Z"
-            />
-            <path
-                stroke-linecap="round"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.757.426 1.757 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.757-2.924 1.757-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.757-.426-1.757-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065Z"/>
+            <path stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-            />
+                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
         </svg>
     `;
 
-    // ÍCONE ORIGINAL DA LIXEIRA
+    // ÍCONE DE EXCLUSÃO
+
     const lixeira = `
         <svg xmlns="http://www.w3.org/2000/svg"
-            width="22" height="22" fill="none"
+            width="22" height="22"
+            fill="none"
             viewBox="0 0 24 24"
-            stroke="currentColor" stroke-width="1.8"
+            stroke="currentColor"
+            stroke-width="1.8"
             aria-hidden="true">
             <path stroke-linecap="round"
                 stroke-linejoin="round"
@@ -52,7 +100,10 @@ document.addEventListener("DOMContentLoaded", () => {
         </svg>
     `;
 
+    // RESPOSTAS DO BACKEND
+
     async function lerResposta(resposta) {
+
         const texto = await resposta.text();
         let dados = {};
 
@@ -73,6 +124,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return dados;
     }
 
+    // MENSAGENS DE ERRO
+
     function mostrarErro(texto) {
         mensagemErro.textContent = texto;
         mensagemErro.classList.remove("hidden");
@@ -83,10 +136,14 @@ document.addEventListener("DOMContentLoaded", () => {
         mensagemErro.classList.add("hidden");
     }
 
+    // FORMATAR MOEDA
+
     function formatarMoeda(valor) {
+
         const numero = Number(valor);
 
-        return Number.isFinite(numero) && valor != null
+        return valor != null && valor !== "" &&
+            Number.isFinite(numero)
             ? numero.toLocaleString("pt-BR", {
                 style: "currency",
                 currency: "BRL"
@@ -94,30 +151,42 @@ document.addEventListener("DOMContentLoaded", () => {
             : "-";
     }
 
+    // FORMATAR QUANTIDADE
+
     function formatarQuantidade(valor) {
+
         const numero = Number(valor);
 
-        return Number.isFinite(numero) && valor != null
+        return valor != null && valor !== "" &&
+            Number.isFinite(numero)
             ? numero.toLocaleString("pt-BR", {
                 maximumFractionDigits: 3
             })
             : "-";
     }
 
+    // FORMATAR DATA
+
     function formatarData(valor) {
+
         if (!valor) return "-";
 
-        const texto = String(valor).slice(0, 10);
-        const partes = texto.split("-");
+        const partes = String(valor)
+            .slice(0, 10)
+            .split("-");
 
-        if (partes.length !== 3) return "-";
+        if (partes.length !== 3) {
+            return "-";
+        }
 
         return `${partes[2]}/${partes[1]}/${partes[0]}`;
     }
 
-    // PRIORIDADE PARA LOTES INATIVOS
+    // CALCULAR STATUS DO LOTE
+
     function calcularStatus(lote) {
 
+        // Prioriza lotes inativos
         if (lote.inativo === true) {
             return "Inativo";
         }
@@ -128,7 +197,9 @@ document.addEventListener("DOMContentLoaded", () => {
             return "Esgotado";
         }
 
-        const validade = String(lote.dataValidade || "").slice(0, 10);
+        const validade = String(
+            lote.dataValidade || ""
+        ).slice(0, 10);
 
         if (!/^\d{4}-\d{2}-\d{2}$/.test(validade)) {
             return "Ativo";
@@ -160,14 +231,21 @@ document.addEventListener("DOMContentLoaded", () => {
         return "Ativo";
     }
 
+    // CRIAR CÉLULAS
+
     function criarCelula(texto, classes = "") {
+
         const td = document.createElement("td");
 
-        td.className = `px-3 py-3 font-semibold ${classes}`;
+        td.className =
+            `px-3 py-3 font-semibold ${classes}`;
+
         td.textContent = String(texto);
 
         return td;
     }
+
+    // CRIAR BOTÕES
 
     function criarBotao(titulo, icone, acao) {
 
@@ -175,6 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         botao.type = "button";
         botao.title = titulo;
+
         botao.setAttribute("aria-label", titulo);
 
         botao.className =
@@ -186,14 +265,15 @@ document.addEventListener("DOMContentLoaded", () => {
         return botao;
     }
 
-    // MODAL
+    // ABRIR MODAL
+
     function abrirModal(titulo, texto, nomeBotao, acao) {
 
         modalTitulo.textContent = titulo;
         modalTexto.textContent = texto;
         modalConfirmar.textContent = nomeBotao;
-        modalConfirmar.disabled = false;
 
+        modalConfirmar.disabled = false;
         acaoModal = acao;
 
         modal.classList.remove("hidden");
@@ -202,75 +282,100 @@ document.addEventListener("DOMContentLoaded", () => {
         modalCancelar.focus();
     }
 
+    // FECHAR MODAL
+
     function fecharModal() {
+
         modal.classList.add("hidden");
         modal.classList.remove("flex");
+
         acaoModal = null;
     }
 
-    modalCancelar.addEventListener("click", fecharModal);
+    // EVENTOS DO MODAL
 
-    modal.addEventListener("click", evento => {
-        if (evento.target === modal) {
+    modalCancelar.addEventListener("click", () => {
+        if (!processando) fecharModal();
+    });
+
+    modal.addEventListener("click", (evento) => {
+        if (evento.target === modal && !processando) {
             fecharModal();
         }
     });
 
-    document.addEventListener("keydown", evento => {
-        if (evento.key === "Escape" &&
+    document.addEventListener("keydown", (evento) => {
+        if (
+            evento.key === "Escape" &&
             !modal.classList.contains("hidden") &&
-            !modalConfirmar.disabled) {
+            !processando
+        ) {
             fecharModal();
         }
     });
+
+    // CONFIRMAR EXCLUSÃO OU INATIVAÇÃO
 
     modalConfirmar.addEventListener("click", async () => {
 
-        if (!acaoModal || modalConfirmar.disabled) return;
+        if (!acaoModal || processando) return;
+
+        processando = true;
 
         const acao = acaoModal;
         modalConfirmar.disabled = true;
         modalCancelar.disabled = true;
 
         try {
+
             const mensagem = await acao();
 
             fecharModal();
-
             await carregarLotes();
 
             alert(mensagem);
 
         } catch (erro) {
+
+            console.error("Erro na operação do lote:", erro);
             mostrarErro(erro.message);
 
         } finally {
+
+            processando = false;
             modalConfirmar.disabled = false;
             modalCancelar.disabled = false;
         }
     });
 
-    // VERIFICA MOVIMENTAÇÕES ANTES DE EXCLUIR
+    // VERIFICAR EXCLUSÃO
+
+    // Consulta se o lote pode ser excluído
     async function verificarExclusao(id) {
 
         limparErro();
 
         try {
-            const resposta = await fetch(
+
+            const resposta = await requisicaoAutenticada(
                 `${API}/lotes/${encodeURIComponent(id)}/exclusao`
             );
 
             const dados = await lerResposta(resposta);
 
+            // LOTE SEM MOVIMENTAÇÕES
             if (dados.podeExcluir === true) {
 
                 abrirModal(
                     "Excluir lote",
+
                     "Tem certeza de que deseja excluir este lote? Esta ação não poderá ser desfeita.",
+
                     "Excluir lote",
+
                     async () => {
 
-                        const resposta = await fetch(
+                        const resposta = await requisicaoAutenticada(
                             `${API}/lotes/${encodeURIComponent(id)}`,
                             { method: "DELETE" }
                         );
@@ -284,14 +389,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } else {
 
+                // LOTE COM MOVIMENTAÇÕES
                 abrirModal(
                     "Não é possível excluir o lote",
+
                     dados.mensagem ||
-                    "Este lote não pode ser excluído, pois possui movimentações registradas. Deseja torná-lo inativo?",
+                    "Este lote possui movimentações. Deseja torná-lo inativo?",
+
                     "Tornar inativo",
+
                     async () => {
 
-                        const resposta = await fetch(
+                        const resposta = await requisicaoAutenticada(
                             `${API}/lotes/${encodeURIComponent(id)}/status`,
                             {
                                 method: "PATCH",
@@ -313,11 +422,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
         } catch (erro) {
+
             mostrarErro(
                 `Não foi possível verificar o lote: ${erro.message}`
             );
         }
     }
+
+    // CRIAR LINHA DA TABELA
 
     function criarLinha(lote) {
 
@@ -360,13 +472,16 @@ document.addEventListener("DOMContentLoaded", () => {
             criarCelula(calcularStatus(lote), "text-center")
         );
 
-        // AÇÕES
+        // BOTÕES DE AÇÃO
+
         const celula = document.createElement("td");
         celula.className = "rounded-r-md px-3 py-3";
 
         const grupo = document.createElement("div");
-        grupo.className = "flex items-center justify-center gap-3";
+        grupo.className =
+            "flex items-center justify-center gap-3";
 
+        // BOTÃO EDITAR
         const editar = criarBotao(
             "Editar lote",
             engrenagem,
@@ -376,6 +491,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         );
 
+        // BOTÃO EXCLUIR
         const excluir = criarBotao(
             "Excluir lote",
             lixeira,
@@ -385,6 +501,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!id) {
             editar.disabled = true;
             excluir.disabled = true;
+
             editar.title = "ID do lote não encontrado";
             excluir.title = "ID do lote não encontrado";
         }
@@ -396,7 +513,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return linha;
     }
 
+    // MOSTRAR MENSAGEM NA TABELA
+
     function mostrarMensagem(texto) {
+
         tabela.replaceChildren();
 
         const linha = document.createElement("tr");
@@ -407,17 +527,24 @@ document.addEventListener("DOMContentLoaded", () => {
             "px-3 py-6 text-center text-text-secondary";
 
         celula.textContent = texto;
+
         linha.appendChild(celula);
         tabela.appendChild(linha);
     }
 
+    // CARREGAR LOTES
+
+    // Busca somente lotes da conta autenticada
     async function carregarLotes() {
 
         limparErro();
         mostrarMensagem("Carregando lotes...");
 
         try {
-            const resposta = await fetch(`${API}/lotes`);
+
+            const resposta = await requisicaoAutenticada(
+                `${API}/lotes`
+            );
 
             const dados = await lerResposta(resposta);
 
@@ -427,22 +554,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
             tabela.replaceChildren();
 
+            // Nenhum lote cadastrado na conta
             if (dados.lotes.length === 0) {
                 mostrarMensagem("Nenhum lote cadastrado.");
                 return;
             }
 
-            dados.lotes.forEach(lote => {
+            dados.lotes.forEach((lote) => {
                 tabela.appendChild(criarLinha(lote));
             });
 
         } catch (erro) {
-            console.error(erro);
+
+            console.error("Erro ao carregar lotes:", erro);
+
             mostrarMensagem("Não foi possível carregar os lotes.");
             mostrarErro(erro.message);
         }
     }
 
-    carregarLotes();
+    // INICIALIZAR TELA
 
+    if (!obterToken()) {
+        encerrarAcesso();
+        return;
+    }
+
+    carregarLotes();
 });

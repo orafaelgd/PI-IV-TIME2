@@ -1,3 +1,4 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
 
 package service;
 
@@ -21,14 +22,14 @@ import static com.mongodb.client.model.Filters.*;
 
 public class LotesService {
 
-    // Coleções utilizadas no MongoDB
+    // COLEÇÕES DO MONGODB
+
     private final MongoCollection<Document> lotes;
     private final MongoCollection<Document> itens;
     private final MongoCollection<Document> movimentacoes;
 
     // TRATAMENTO DE ERROS
 
-    // Erro utilizado quando um lote não é encontrado
     public static class LoteNaoEncontradoException
         extends RuntimeException {
 
@@ -37,7 +38,6 @@ public class LotesService {
         }
     }
 
-    // Erro utilizado quando uma operação não é permitida
     public static class ConflitoLoteException
         extends RuntimeException {
 
@@ -59,7 +59,6 @@ public class LotesService {
 
     // CONSTRUTOR
 
-    // Recebe as coleções necessárias para gerenciar os lotes
     public LotesService(
         MongoCollection<Document> lotes,
         MongoCollection<Document> itens,
@@ -70,13 +69,13 @@ public class LotesService {
         this.movimentacoes = movimentacoes;
     }
 
-    // CONVERSÃO DOS DADOS
+    // CONVERTER TEXTO
 
-    // Obtém o texto de um campo e remove espaços extras
     private static String obterTexto(
         Document dados,
         String campo
     ) {
+
         Object valor = dados.get(campo);
 
         return valor instanceof String
@@ -84,11 +83,13 @@ public class LotesService {
             : "";
     }
 
-    // Converte números do MongoDB para BigDecimal
+    // CONVERTER NÚMEROS
+
     private static BigDecimal obterDecimal(
         Document dados,
         String campo
     ) {
+
         Object valor = dados.get(campo);
 
         if (valor instanceof Decimal128) {
@@ -110,7 +111,8 @@ public class LotesService {
         return BigDecimal.ZERO;
     }
 
-    // Converte a data para texto usado pelo frontend
+    // CONVERTER DATA
+
     private static String dataTexto(Date data) {
 
         if (data == null) {
@@ -120,13 +122,19 @@ public class LotesService {
         return data.toInstant().toString();
     }
 
-    // BUSCAR LOTE NO BANCO
+    // BUSCAR LOTE
 
-    // Consulta o lote e verifica se ele existe
-    private Document encontrarLote(ObjectId id) {
+    // Somente o proprietário pode consultar o lote
+    private Document encontrarLote(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
         Document lote = lotes.find(
-            eq("_id", id)
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            )
         ).first();
 
         if (lote == null) {
@@ -136,39 +144,34 @@ public class LotesService {
         return lote;
     }
 
-    // VALIDAR DADOS DO LOTE
+    // VALIDAR LOTE
 
-    // Valida os dados para cadastro ou edição
-    // O ID é nulo quando estamos cadastrando um lote
     private Document validarLote(
         Document dados,
-        ObjectId loteExistenteId
+        ObjectId loteExistenteId,
+        ObjectId usuarioId
     ) {
 
-        String itemTexto =
-            obterTexto(dados, "itemId");
-
-        String codigo =
-            obterTexto(dados, "codigo");
-
-        String quantidadeTexto =
-            obterTexto(dados, "quantidadeRecebida");
-
-        String valorTexto =
-            obterTexto(dados, "valorUnitario");
-
-        String entradaTexto =
-            obterTexto(dados, "dataEntrada");
-
-        String validadeTexto =
-            obterTexto(dados, "dataValidade");
-
-        String observacao =
-            obterTexto(dados, "observacao");
+        String itemTexto = obterTexto(dados, "itemId");
+        String codigo = obterTexto(dados, "codigo");
+        String quantidadeTexto = obterTexto(
+            dados, "quantidadeRecebida"
+        );
+        String valorTexto = obterTexto(
+            dados, "valorUnitario"
+        );
+        String entradaTexto = obterTexto(
+            dados, "dataEntrada"
+        );
+        String validadeTexto = obterTexto(
+            dados, "dataValidade"
+        );
+        String observacao = obterTexto(
+            dados, "observacao"
+        );
 
         // VALIDAR PRODUTO
 
-        // Verifica se o ID do produto é válido
         if (!ObjectId.isValid(itemTexto)) {
             throw new IllegalArgumentException(
                 "Selecione um produto valido."
@@ -177,9 +180,12 @@ public class LotesService {
 
         ObjectId itemId = new ObjectId(itemTexto);
 
-        // Busca o produto vinculado ao lote
+        // O produto deve pertencer ao usuário autenticado
         Document produto = itens.find(
-            eq("_id", itemId)
+            and(
+                eq("_id", itemId),
+                eq("usuarioId", usuarioId)
+            )
         ).first();
 
         if (produto == null) {
@@ -190,19 +196,18 @@ public class LotesService {
 
         // VALIDAR PRODUTO INATIVO
 
-        // Não permite cadastrar lotes de produtos inativos
-        // Permite editar lotes já vinculados ao mesmo produto
-        if (
-            "inativo".equals(
-                produto.getString("status")
-            )
-        ) {
+        // Permite editar o lote já vinculado ao produto
+        // Não permite criar um novo vínculo com produto inativo
+        if ("inativo".equals(produto.getString("status"))) {
 
             Document loteExistente =
                 loteExistenteId == null
                     ? null
                     : lotes.find(
-                        eq("_id", loteExistenteId)
+                        and(
+                            eq("_id", loteExistenteId),
+                            eq("usuarioId", usuarioId)
+                        )
                     ).first();
 
             if (
@@ -211,6 +216,7 @@ public class LotesService {
                     loteExistente.getObjectId("itemId")
                 )
             ) {
+
                 throw new IllegalArgumentException(
                     "Nao e permitido vincular lotes " +
                     "a produto inativo."
@@ -220,7 +226,6 @@ public class LotesService {
 
         // VALIDAR CÓDIGO
 
-        // O código é obrigatório e deve ter até 50 caracteres
         if (
             codigo.isEmpty() ||
             codigo.length() > 50
@@ -235,8 +240,8 @@ public class LotesService {
         BigDecimal quantidade;
         BigDecimal valorUnitario;
 
-        // Converte a quantidade e o valor para números
         try {
+
             quantidade = new BigDecimal(
                 quantidadeTexto.replace(",", ".")
             );
@@ -246,19 +251,18 @@ public class LotesService {
             );
 
         } catch (NumberFormatException erro) {
+
             throw new IllegalArgumentException(
                 "Quantidade ou valor unitario invalido."
             );
         }
 
-        // A quantidade recebida deve ser positiva
         if (quantidade.signum() <= 0) {
             throw new IllegalArgumentException(
                 "A quantidade recebida deve ser maior que zero."
             );
         }
 
-        // O valor unitário deve ser positivo
         if (valorUnitario.signum() <= 0) {
             throw new IllegalArgumentException(
                 "O valor unitario deve ser maior que zero."
@@ -271,21 +275,21 @@ public class LotesService {
         Date validade;
 
         try {
+
             LocalDate dataEntrada =
                 LocalDate.parse(entradaTexto);
 
             LocalDate dataValidade =
                 LocalDate.parse(validadeTexto);
 
-            // A validade não pode ser anterior à entrada
             if (dataValidade.isBefore(dataEntrada)) {
+
                 throw new IllegalArgumentException(
                     "A validade nao pode ser anterior " +
                     "a data de entrada."
                 );
             }
 
-            // Converte as datas para o formato do MongoDB
             entrada = Date.from(
                 dataEntrada.atStartOfDay()
                     .toInstant(ZoneOffset.UTC)
@@ -297,6 +301,7 @@ public class LotesService {
             );
 
         } catch (DateTimeParseException erro) {
+
             throw new IllegalArgumentException(
                 "Informe datas validas."
             );
@@ -304,7 +309,6 @@ public class LotesService {
 
         // VALIDAR OBSERVAÇÃO
 
-        // A observação é obrigatória
         if (
             observacao.isEmpty() ||
             observacao.length() > 1000
@@ -316,67 +320,91 @@ public class LotesService {
 
         // CALCULAR CUSTO TOTAL
 
-        // Multiplica a quantidade pelo valor unitário
         BigDecimal custoTotal =
             quantidade.multiply(valorUnitario);
 
-        // Converte os valores para Decimal128
-        Decimal128 quantidadeDecimal =
-            new Decimal128(quantidade);
-
-        Decimal128 custoDecimal =
-            new Decimal128(custoTotal);
-
-        // Retorna os dados validados para salvar no banco
+        // Organiza os dados do lote
         return new Document()
             .append("itemId", itemId)
             .append("codigo", codigo)
             .append(
                 "quantidadeInicial",
-                quantidadeDecimal
+                new Decimal128(quantidade)
             )
             .append("dataEntrada", entrada)
             .append("dataValidade", validade)
             .append(
                 "custoTotalAquisicao",
-                custoDecimal
+                new Decimal128(custoTotal)
             )
             .append("observacao", observacao);
     }
 
+    // VERIFICAR CÓDIGO DUPLICADO
+
+    // Cada usuário pode ter seus próprios códigos de lote
+    private boolean codigoDuplicado(
+        String codigo,
+        ObjectId usuarioId,
+        ObjectId ignorarId
+    ) {
+
+        if (ignorarId == null) {
+
+            return lotes.find(
+                and(
+                    eq("usuarioId", usuarioId),
+                    eq("codigo", codigo)
+                )
+            ).first() != null;
+        }
+
+        return lotes.find(
+            and(
+                eq("usuarioId", usuarioId),
+                eq("codigo", codigo),
+                ne("_id", ignorarId)
+            )
+        ).first() != null;
+    }
+
     // CADASTRAR LOTE
 
-    // Valida e cadastra um novo lote no MongoDB
-    public Document cadastrarLote(Document dados) {
+    public Document cadastrarLote(
+        Document dados,
+        ObjectId usuarioId
+    ) {
 
-        Document lote = validarLote(dados, null);
+        Document lote = validarLote(
+            dados, null, usuarioId
+        );
 
-        String codigo = lote.getString("codigo");
-
-        // Verifica se já existe um lote com esse código
         if (
-            lotes.find(
-                eq("codigo", codigo)
-            ).first() != null
+            codigoDuplicado(
+                lote.getString("codigo"),
+                usuarioId,
+                null
+            )
         ) {
             throw new ConflitoLoteException(
                 "Ja existe um lote com este codigo."
             );
         }
 
-        // A quantidade disponível começa igual à inicial
+        // Salva o proprietário do lote
+        lote.append("usuarioId", usuarioId);
+
+        // O saldo inicial é igual à quantidade recebida
         lote.append(
             "quantidadeDisponivel",
             lote.get("quantidadeInicial")
         );
 
-        // Mantém o campo original utilizado pelo banco
+        // Preserva os campos utilizados pelo sistema
         lote.append("status", false);
-
-        // Define o lote como ativo inicialmente
         lote.append("inativo", false);
+        lote.append("criadoEm", new Date());
 
-        // Salva o lote no MongoDB
         lotes.insertOne(lote);
 
         return new Document()
@@ -392,27 +420,22 @@ public class LotesService {
 
     // BUSCAR LOTE PARA EDIÇÃO
 
-    // Retorna os dados de um lote específico
-    public Document buscarLote(ObjectId id) {
+    public Document buscarLote(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
-        Document lote = encontrarLote(id);
+        Document lote = encontrarLote(id, usuarioId);
 
-        ObjectId itemId =
-            lote.getObjectId("itemId");
+        ObjectId itemId = lote.getObjectId("itemId");
 
-        // Organiza os dados para enviar ao frontend
         Document resposta = new Document()
             .append("id", id.toHexString())
             .append(
                 "itemId",
-                itemId != null
-                    ? itemId.toHexString()
-                    : null
+                itemId == null ? null : itemId.toHexString()
             )
-            .append(
-                "codigo",
-                lote.getString("codigo")
-            )
+            .append("codigo", lote.getString("codigo"))
             .append(
                 "quantidadeInicial",
                 obterDecimal(
@@ -457,7 +480,7 @@ public class LotesService {
 
     // CONSULTAR MOVIMENTAÇÕES
 
-    // Verifica se existem movimentações vinculadas ao lote
+    // Verifica movimentações vinculadas ao lote
     private boolean possuiMovimentacoes(ObjectId loteId) {
 
         return movimentacoes.countDocuments(
@@ -467,31 +490,27 @@ public class LotesService {
 
     // ATUALIZAR LOTE
 
-    // Atualiza um lote respeitando as regras de estoque
     public void atualizarLote(
         ObjectId id,
-        Document dados
+        Document dados,
+        ObjectId usuarioId
     ) {
 
-        // Busca o lote antes de realizar alterações
-        Document existente = encontrarLote(id);
+        // Confere se o lote pertence ao usuário
+        Document existente = encontrarLote(
+            id, usuarioId
+        );
 
-        // Valida os novos dados recebidos
-        Document alteracoes = validarLote(dados, id);
+        Document alteracoes = validarLote(
+            dados, id, usuarioId
+        );
 
         String codigo = alteracoes.getString("codigo");
 
         // VERIFICAR CÓDIGO DUPLICADO
 
-        // Impede utilizar o código de outro lote
-        Document duplicado = lotes.find(
-            and(
-                eq("codigo", codigo),
-                ne("_id", id)
-            )
-        ).first();
+        if (codigoDuplicado(codigo, usuarioId, id)) {
 
-        if (duplicado != null) {
             throw new ConflitoLoteException(
                 "Ja existe um lote com este codigo."
             );
@@ -525,12 +544,12 @@ public class LotesService {
 
         // PROTEGER LOTES COM MOVIMENTAÇÕES
 
-        // Não permite alterar produto ou quantidade
-        // quando o lote já possui movimentações
+        // Não permite mudar produto ou quantidade
         if (
             temMovimentacoes &&
             (mudouProduto || mudouQuantidade)
         ) {
+
             throw new ConflitoLoteException(
                 "Este lote possui movimentacoes. " +
                 "Nao e permitido alterar o produto " +
@@ -538,14 +557,13 @@ public class LotesService {
             );
         }
 
-        // PROTEGER SALDO DISPONÍVEL
+        // PROTEGER SALDO DO ESTOQUE
 
-        // Impede alterar a quantidade inicial quando
-        // o saldo disponível já foi modificado
         if (
             mudouQuantidade &&
             saldoAtual.compareTo(quantidadeAtual) != 0
         ) {
+
             throw new ConflitoLoteException(
                 "A quantidade nao pode ser alterada " +
                 "porque o saldo disponivel ja foi modificado."
@@ -554,24 +572,23 @@ public class LotesService {
 
         // ATUALIZAR QUANTIDADE DISPONÍVEL
 
-        // Atualiza o saldo quando a quantidade recebida muda
         if (mudouQuantidade) {
+
             alteracoes.append(
                 "quantidadeDisponivel",
                 alteracoes.get("quantidadeInicial")
             );
         }
 
-        // Registra a data da atualização
         alteracoes.append("atualizadoEm", new Date());
 
         // SALVAR ALTERAÇÕES
 
-        // Confere os valores anteriores para evitar
-        // sobrescrever alterações feitas por outra operação
+        // Compara os valores anteriores antes de atualizar
         UpdateResult resultado = lotes.updateOne(
             and(
                 eq("_id", id),
+                eq("usuarioId", usuarioId),
                 eq(
                     "quantidadeDisponivel",
                     existente.get("quantidadeDisponivel")
@@ -585,8 +602,8 @@ public class LotesService {
             new Document("$set", alteracoes)
         );
 
-        // Informa quando os dados mudaram durante a edição
         if (resultado.getMatchedCount() == 0) {
+
             throw new ConflitoLoteException(
                 "Os dados do lote foram modificados. " +
                 "Atualize a pagina e tente novamente."
@@ -596,33 +613,34 @@ public class LotesService {
 
     // VERIFICAR EXCLUSÃO
 
-    // Consulta se o lote pode ser excluído
-    public Document verificarExclusao(ObjectId id) {
+    public Document verificarExclusao(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
-        encontrarLote(id);
+        encontrarLote(id, usuarioId);
 
         boolean temMovimentacoes =
             possuiMovimentacoes(id);
 
         String mensagem;
 
-        // Lotes com movimentações devem ser inativados
         if (temMovimentacoes) {
+
             mensagem =
                 "Este lote nao pode ser excluido, " +
                 "pois possui movimentacoes registradas. " +
                 "Deseja torna-lo inativo?";
+
         } else {
+
             mensagem =
                 "Tem certeza de que deseja excluir este lote? " +
                 "Esta acao nao podera ser desfeita.";
         }
 
         return new Document()
-            .append(
-                "podeExcluir",
-                !temMovimentacoes
-            )
+            .append("podeExcluir", !temMovimentacoes)
             .append(
                 "possuiMovimentacoes",
                 temMovimentacoes
@@ -632,13 +650,16 @@ public class LotesService {
 
     // EXCLUIR LOTE
 
-    // Exclui apenas lotes que não possuem movimentações
-    public void excluirLote(ObjectId id) {
+    public void excluirLote(
+        ObjectId id,
+        ObjectId usuarioId
+    ) {
 
-        encontrarLote(id);
+        encontrarLote(id, usuarioId);
 
-        // Verifica novamente antes de excluir
+        // Não permite excluir lotes com movimentações
         if (possuiMovimentacoes(id)) {
+
             throw new ConflitoLoteException(
                 new Document()
                     .append("podeExcluir", false)
@@ -651,9 +672,11 @@ public class LotesService {
             );
         }
 
-        // Remove o lote do MongoDB
         DeleteResult resultado = lotes.deleteOne(
-            eq("_id", id)
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            )
         );
 
         if (resultado.getDeletedCount() == 0) {
@@ -661,20 +684,18 @@ public class LotesService {
         }
     }
 
-    // INATIVAR OU REATIVAR LOTE
+    // ALTERAR STATUS
 
-    // Altera a situação do lote no sistema
     public String alterarStatus(
         ObjectId id,
-        Document dados
+        Document dados,
+        ObjectId usuarioId
     ) {
 
-        // Verifica se o lote existe
-        encontrarLote(id);
+        encontrarLote(id, usuarioId);
 
         Object valor = dados.get("inativo");
 
-        // O status deve ser verdadeiro ou falso
         if (!(valor instanceof Boolean)) {
             throw new IllegalArgumentException(
                 "Status invalido."
@@ -683,9 +704,11 @@ public class LotesService {
 
         boolean inativo = (Boolean) valor;
 
-        // Atualiza a situação do lote no banco
         UpdateResult resultado = lotes.updateOne(
-            eq("_id", id),
+            and(
+                eq("_id", id),
+                eq("usuarioId", usuarioId)
+            ),
             new Document(
                 "$set",
                 new Document()
@@ -705,15 +728,15 @@ public class LotesService {
 
     // LISTAR LOTES
 
-    // Lista os lotes cadastrados com os dados dos produtos
-    public Document listarLotes() {
+    // Retorna somente lotes da conta autenticada
+    public Document listarLotes(ObjectId usuarioId) {
 
         List<Document> lista = new ArrayList<>();
 
-        // Busca os lotes pela data de entrada mais recente
         for (
-            Document lote : lotes.find()
-                .sort(new Document("dataEntrada", -1))
+            Document lote : lotes.find(
+                eq("usuarioId", usuarioId)
+            ).sort(new Document("dataEntrada", -1))
         ) {
 
             ObjectId itemId =
@@ -724,17 +747,18 @@ public class LotesService {
 
             // BUSCAR NOME DO PRODUTO
 
-            // Consulta o produto vinculado ao lote
             if (itemId != null) {
 
                 Document produto = itens.find(
-                    eq("_id", itemId)
+                    and(
+                        eq("_id", itemId),
+                        eq("usuarioId", usuarioId)
+                    )
                 ).first();
 
                 if (produto != null) {
 
-                    String nome =
-                        produto.getString("nome");
+                    String nome = produto.getString("nome");
 
                     if (nome != null) {
                         nomeProduto = nome;
@@ -744,7 +768,6 @@ public class LotesService {
 
             // ORGANIZAR DADOS PARA O FRONTEND
 
-            // Monta os dados que serão exibidos na tela
             Document resultado = new Document()
                 .append(
                     "id",
@@ -754,15 +777,12 @@ public class LotesService {
                     "codigo",
                     lote.getString("codigo")
                 )
-                .append(
-                    "produto",
-                    nomeProduto
-                )
+                .append("produto", nomeProduto)
                 .append(
                     "itemId",
-                    itemId != null
-                        ? itemId.toHexString()
-                        : null
+                    itemId == null
+                        ? null
+                        : itemId.toHexString()
                 )
                 .append(
                     "quantidadeInicial",
