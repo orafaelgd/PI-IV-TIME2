@@ -1,6 +1,6 @@
 
 // HISTÓRICO DE SAÍDA
-// AUTENTICAÇÃO, PAGINAÇÃO, MOTIVOS E PESQUISA
+// AUTENTICAÇÃO, PAGINAÇÃO, FILTROS, PESQUISA E DESCRIÇÃO
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -37,6 +37,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const botoesMotivo =
         document.querySelectorAll("[data-motivo]");
 
+    // ELEMENTOS DO MODAL
+
+    const modalDescricao = document.getElementById(
+        "modalDescricao"
+    );
+
+    const textoModalDescricao = document.getElementById(
+        "textoModalDescricao"
+    );
+
+    const fecharModalDescricao = document.getElementById(
+        "fecharModalDescricao"
+    );
+
+    const fecharModalDescricaoX = document.getElementById(
+        "fecharModalDescricaoX"
+    );
+
     // VARIÁVEIS
 
     let registrosCarregados = [];
@@ -46,13 +64,20 @@ document.addEventListener("DOMContentLoaded", () => {
     let carregandoHistorico = false;
     let erroCarregamento = false;
 
+    let botaoOrigemModal = null;
+    let overflowAnterior = "";
+
     // VALIDAR ELEMENTOS
 
     if (
         !tabela ||
         !mensagemErro ||
         !campoPesquisa ||
-        botoesMotivo.length === 0
+        botoesMotivo.length === 0 ||
+        !modalDescricao ||
+        !textoModalDescricao ||
+        !fecharModalDescricao ||
+        !fecharModalDescricaoX
     ) {
 
         console.error(
@@ -79,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // CONSULTAR API AUTENTICADA
+    // REQUISIÇÃO AUTENTICADA
 
     async function requisicaoAutenticada(url) {
 
@@ -94,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         }
 
-        // ENVIAR TOKEN DO USUÁRIO LOGADO
+        // ENVIAR TOKEN DA CONTA LOGADA
 
         const resposta = await fetch(url, {
 
@@ -207,12 +232,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }).format(dataConvertida);
     }
 
-    // FORMATAR QUANTIDADE
+    // FORMATAR QUANTIDADE DE SAÍDA
+    // MOSTRAR SOMENTE O NÚMERO
 
-    function formatarQuantidade(
-        quantidade,
-        unidade
-    ) {
+    function formatarQuantidade(quantidade) {
 
         if (
             quantidade === null ||
@@ -238,14 +261,12 @@ document.addEventListener("DOMContentLoaded", () => {
             return "-";
         }
 
-        const valor = numero.toLocaleString(
+        return numero.toLocaleString(
             "pt-BR",
             {
                 maximumFractionDigits: 6
             }
         );
-
-        return `${valor} ${unidade || ""}`.trim();
     }
 
     // MOSTRAR ERRO
@@ -283,6 +304,8 @@ document.addEventListener("DOMContentLoaded", () => {
             : "px-3 py-3 font-semibold";
 
         linha.appendChild(celula);
+
+        return celula;
     }
 
     // MOSTRAR MENSAGEM NA TABELA
@@ -295,7 +318,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const coluna = document.createElement("td");
 
-        coluna.colSpan = 5;
+        // SEIS COLUNAS NO HISTÓRICO
+
+        coluna.colSpan = 6;
 
         coluna.textContent = texto;
 
@@ -307,18 +332,170 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.appendChild(linha);
     }
 
+    // VERIFICAR SE O MODAL ESTÁ ABERTO
+
+    function modalEstaAberto() {
+
+        return !modalDescricao.classList.contains(
+            "hidden"
+        );
+    }
+
+    // ABRIR MODAL DE DESCRIÇÃO
+
+    function abrirModalDescricao(registro, botaoOrigem) {
+
+        // GUARDAR BOTÃO QUE ABRIU O MODAL
+
+        botaoOrigemModal = botaoOrigem;
+
+        // RECUPERAR DESCRIÇÃO DA SAÍDA
+
+        const descricao =
+            typeof registro.observacao === "string"
+                ? registro.observacao.trim()
+                : "";
+
+        // EXIBIR DESCRIÇÃO DO MONGODB
+
+        textoModalDescricao.textContent =
+            descricao ||
+            "Nenhuma descrição registrada para esta saída.";
+
+        // ABRIR MODAL
+
+        modalDescricao.classList.remove("hidden");
+        modalDescricao.classList.add("flex");
+
+        // BLOQUEAR ROLAGEM DO FUNDO
+
+        overflowAnterior =
+            document.body.style.overflow;
+
+        document.body.style.overflow = "hidden";
+
+        // POSICIONAR FOCO
+
+        fecharModalDescricaoX.focus();
+    }
+
+    // FECHAR MODAL
+
+    function fecharModal() {
+
+        if (!modalEstaAberto()) {
+            return;
+        }
+
+        // OCULTAR MODAL
+
+        modalDescricao.classList.add("hidden");
+        modalDescricao.classList.remove("flex");
+
+        // RESTAURAR ROLAGEM
+
+        document.body.style.overflow =
+            overflowAnterior;
+
+        // DEVOLVER FOCO AO BOTÃO ORIGINAL
+
+        if (
+            botaoOrigemModal &&
+            botaoOrigemModal.isConnected
+        ) {
+
+            botaoOrigemModal.focus();
+        }
+
+        botaoOrigemModal = null;
+    }
+
+    // FECHAR MODAL PELO X
+
+    fecharModalDescricaoX.addEventListener(
+        "click",
+        fecharModal
+    );
+
+    // FECHAR MODAL PELO BOTÃO FECHAR
+
+    fecharModalDescricao.addEventListener(
+        "click",
+        fecharModal
+    );
+
+    // FECHAR AO CLICAR NO FUNDO
+
+    modalDescricao.addEventListener(
+        "click",
+        (evento) => {
+
+            if (evento.target === modalDescricao) {
+
+                fecharModal();
+            }
+        }
+    );
+
+    // CONTROLAR TECLADO DO MODAL
+
+    document.addEventListener("keydown", (evento) => {
+
+        if (!modalEstaAberto()) {
+            return;
+        }
+
+        // FECHAR COM ESCAPE
+
+        if (evento.key === "Escape") {
+
+            evento.preventDefault();
+
+            fecharModal();
+
+            return;
+        }
+
+        // MANTER FOCO DENTRO DO MODAL
+
+        if (evento.key === "Tab") {
+
+            const primeiro = fecharModalDescricaoX;
+            const ultimo = fecharModalDescricao;
+
+            if (
+                evento.shiftKey &&
+                document.activeElement === primeiro
+            ) {
+
+                evento.preventDefault();
+
+                ultimo.focus();
+
+            } else if (
+                !evento.shiftKey &&
+                document.activeElement === ultimo
+            ) {
+
+                evento.preventDefault();
+
+                primeiro.focus();
+            }
+        }
+    });
+
     // CRIAR LINHA DO HISTÓRICO
 
     function criarLinha(registro) {
 
         const linha = document.createElement("tr");
 
-        // PADRÃO VISUAL DAS OUTRAS TELAS
+        // PADRÃO VISUAL DA TABELA
 
         linha.className =
             "border-b border-gray-300 bg-[#e9ebee] text-text";
 
-        // RESPONSÁVEL
+        // RESPONSÁVEL PELO REGISTRO
 
         const responsavel =
             registro.origem === "AUTOMATICA"
@@ -335,12 +512,12 @@ document.addEventListener("DOMContentLoaded", () => {
         );
 
         // QUANTIDADE DE SAÍDA
+        // SEM UNIDADE DE MEDIDA
 
         criarCelula(
             linha,
             formatarQuantidade(
-                registro.quantidade,
-                registro.unidade
+                registro.quantidade
             ),
             true
         );
@@ -371,12 +548,55 @@ document.addEventListener("DOMContentLoaded", () => {
             true
         );
 
+        // COLUNA DE DETALHES
+
+        const celulaDetalhes =
+            document.createElement("td");
+
+        celulaDetalhes.className =
+            "px-3 py-3 text-center";
+
+        // BOTÃO DESCRIÇÃO
+
+        const botaoDescricao =
+            document.createElement("button");
+
+        botaoDescricao.type = "button";
+
+        botaoDescricao.textContent = "Descrição";
+
+        botaoDescricao.className = "botao-descricao";
+
+        botaoDescricao.setAttribute(
+            "aria-label",
+            `Ver descrição da saída de ${
+                registro.produtoNome || "produto"
+            }`
+        );
+
+        // ABRIR MODAL COM A DESCRIÇÃO DA LINHA
+
+        botaoDescricao.addEventListener(
+            "click",
+            () => {
+
+                abrirModalDescricao(
+                    registro,
+                    botaoDescricao
+                );
+            }
+        );
+
+        celulaDetalhes.appendChild(
+            botaoDescricao
+        );
+
+        linha.appendChild(celulaDetalhes);
+
         return linha;
     }
 
-    // NORMALIZAR TEXTO
-
-    // IGNORAR ACENTOS E LETRAS MAIÚSCULAS
+    // NORMALIZAR TEXTO DA PESQUISA
 
     function normalizarTexto(texto) {
 
@@ -391,19 +611,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function selecionarFiltro(botaoAtivo) {
 
-        // ATUALIZAR VISUAL DE TODOS OS BOTÕES
+        // REMOVER DESTAQUE DOS OUTROS BOTÕES
 
         botoesMotivo.forEach((botao) => {
 
-            botao.classList.remove(
-                "bg-primary-dark",
-                "text-white"
-            );
-
-            botao.classList.add(
-                "bg-[#e9ebee]",
-                "text-text"
-            );
+            botao.classList.remove("ativo");
 
             botao.setAttribute(
                 "aria-pressed",
@@ -411,17 +623,9 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         });
 
-        // DESTACAR BOTÃO SELECIONADO
+        // DESTACAR O FILTRO SELECIONADO
 
-        botaoAtivo.classList.remove(
-            "bg-[#e9ebee]",
-            "text-text"
-        );
-
-        botaoAtivo.classList.add(
-            "bg-primary-dark",
-            "text-white"
-        );
+        botaoAtivo.classList.add("ativo");
 
         botaoAtivo.setAttribute(
             "aria-pressed",
@@ -433,7 +637,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function filtrarHistorico() {
 
-        // NÃO MODIFICAR RESULTADOS DURANTE CARREGAMENTO
+        // NÃO ALTERAR DURANTE CARREGAMENTO OU ERRO
 
         if (
             carregandoHistorico ||
@@ -442,13 +646,20 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // PESQUISA PELO NOME DO PRODUTO
+        // FECHAR MODAL ANTES DE ATUALIZAR A TABELA
+
+        if (modalEstaAberto()) {
+
+            fecharModal();
+        }
+
+        // RECUPERAR NOME PESQUISADO
 
         const pesquisa = normalizarTexto(
             campoPesquisa.value
         );
 
-        // APLICAR FILTRO DE NOME E MOTIVO
+        // FILTRAR POR PRODUTO E MOTIVO
 
         const registrosFiltrados =
             registrosCarregados.filter((registro) => {
@@ -508,7 +719,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.appendChild(fragmento);
     }
 
-    // PESQUISAR ENQUANTO DIGITA
+    // EVENTO DA BARRA DE PESQUISA
 
     campoPesquisa.addEventListener(
         "input",
@@ -523,25 +734,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const motivo = botao.dataset.motivo;
 
-            // VALIDAR MOTIVO SELECIONADO
+            // VALIDAR MOTIVO
 
             if (!MOTIVOS_VALIDOS.includes(motivo)) {
                 return;
             }
 
-            // ATUALIZAR MOTIVO E APARÊNCIA
+            // ATUALIZAR FILTRO
 
             motivoSelecionado = motivo;
 
+            // DESTACAR BOTÃO
+
             selecionarFiltro(botao);
 
-            // APLICAR PESQUISA E MOTIVO JUNTOS
+            // ATUALIZAR RESULTADOS
 
             filtrarHistorico();
         });
     });
 
-    // CARREGAR TODAS AS SAÍDAS
+    // CARREGAR HISTÓRICO DO MONGODB
 
     async function carregarHistorico() {
 
@@ -563,7 +776,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let pagina = 1;
             let total = 0;
 
-            // CONSULTAR TODAS AS PÁGINAS DA API
+            // CONSULTAR TODAS AS PÁGINAS
 
             do {
 
@@ -574,7 +787,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         somenteDesperdicio: "false"
                     });
 
-                // REQUISIÇÃO COM TOKEN
+                // CONSULTAR COM AUTENTICAÇÃO
 
                 const resposta =
                     await requisicaoAutenticada(
@@ -603,11 +816,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 total = Number(dados.total);
 
-                // ARMAZENAR TODAS AS SAÍDAS
+                // ARMAZENAR SAÍDAS
 
                 registros.push(...itens);
 
-                // VALIDAR PAGINAÇÃO
+                // CONFERIR PAGINAÇÃO
 
                 if (
                     itens.length === 0 &&
@@ -623,13 +836,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } while (registros.length < total);
 
-            // GUARDAR RESULTADOS PARA FILTRAR LOCALMENTE
+            // GUARDAR REGISTROS PARA A PESQUISA
 
             registrosCarregados = registros;
 
             carregandoHistorico = false;
 
-            // EXIBIR TODOS OU APLICAR FILTROS ATIVOS
+            // APLICAR FILTROS
 
             filtrarHistorico();
 
@@ -657,6 +870,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // INICIALIZAÇÃO
 
+    // VERIFICAR TOKEN DA CONTA
+
     if (!obterToken()) {
 
         encerrarAcesso();
@@ -672,10 +887,11 @@ document.addEventListener("DOMContentLoaded", () => {
         );
 
     if (filtroInicial) {
+
         selecionarFiltro(filtroInicial);
     }
 
-    // CARREGAR HISTÓRICO DA CONTA LOGADA
+    // CARREGAR HISTÓRICO
 
     carregarHistorico();
 });
