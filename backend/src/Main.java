@@ -1,3 +1,4 @@
+
 import com.sun.net.httpserver.HttpServer;
 
 import java.net.InetSocketAddress;
@@ -24,16 +25,21 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
-        MongoClient cliente = MongoDBConnection.conectar();
+        MongoClient cliente =
+            MongoDBConnection.conectar();
 
         try {
 
             // CONEXÃO COM O BANCO
 
             MongoDatabase banco =
-                cliente.getDatabase("desperdicio_alimentos");
+                cliente.getDatabase(
+                    "desperdicio_alimentos"
+                );
 
-            banco.runCommand(new Document("ping", 1));
+            banco.runCommand(
+                new Document("ping", 1)
+            );
 
             // COLEÇÕES DO MONGODB
 
@@ -73,18 +79,23 @@ public class Main {
             sessoes.createIndex(
                 Indexes.ascending("expiraEm"),
                 new IndexOptions().expireAfter(
-                    0L, TimeUnit.SECONDS
+                    0L,
+                    TimeUnit.SECONDS
                 )
             );
 
             // SERVIDOR HTTP
 
-            HttpServer servidor = HttpServer.create(
-                new InetSocketAddress("127.0.0.1", 8080),
-                0
-            );
+            HttpServer servidor =
+                HttpServer.create(
+                    new InetSocketAddress(
+                        "127.0.0.1",
+                        8080
+                    ),
+                    0
+                );
 
-            // USUÁRIOS
+            // CADASTRO DE USUÁRIOS
 
             servidor.createContext(
                 "/api/usuarios",
@@ -94,39 +105,162 @@ public class Main {
             // LOGIN E SESSÕES
 
             LoginHandler loginHandler =
-                new LoginHandler(usuarios, sessoes);
+                new LoginHandler(
+                    usuarios,
+                    sessoes
+                );
 
             servidor.createContext(
-                "/api/login", loginHandler
+                "/api/login",
+                loginHandler
             );
 
-                        // MOVIMENTAÇÕES
-                        servidor.createContext(
-                                        "/api/movimentacoes",
-                                        new MovimentacoesHandler(
-                                                        cliente,
-                                                        lotes,
-                                                        movimentacoes));
+            servidor.createContext(
+                "/api/logout",
+                loginHandler
+            );
 
-                        // ENCERRAMENTO SEGURO
-                        Runtime.getRuntime().addShutdownHook(
-                                        new Thread(() -> {
-                                                servidor.stop(0);
-                                                cliente.close();
-                                        }));
+            servidor.createContext(
+                "/api/usuario",
+                loginHandler
+            );
 
                         // INICIALIZAÇÃO
                         servidor.start();
 
-                        RepositorioVencimentos repositorio = new RepositorioVencimentos(lotes, produtos);
+            servidor.createContext(
+                "/api/perfil",
+                new PerfilUsuarioHandler(
+                    usuarios,
+                    sessoes
+                )
+            );
 
                         Thread threadServidor = new Thread(
                                         new ServidorSocket(repositorio));
 
-                        threadServidor.start();
+            // Valida a sessão e consulta dados da conta
+            DashboardHandler dashboardHandler =
+                new DashboardHandler(
+                    produtos,
+                    lotes,
+                    usuarios,
+                    sessoes
+                );
 
-                        System.out.println(
-                                        "Servidor iniciado em http://localhost:8080/");
+            servidor.createContext(
+                "/api/dashboard/resumo",
+                dashboardHandler
+            );
+
+            // RELATÓRIOS
+
+            // Valida a sessão e separa relatórios por usuário
+            RelatoriosHandler relatoriosHandler =
+                new RelatoriosHandler(
+                    produtos,
+                    lotes,
+                    movimentacoes,
+                    usuarios,
+                    sessoes
+                );
+
+            servidor.createContext(
+                "/api/relatorios/",
+                relatoriosHandler
+            );
+
+            // PRODUTOS E CATEGORIAS
+
+            ProdutosHandler produtosHandler =
+                new ProdutosHandler(
+                    produtos,
+                    categorias,
+                    lotes,
+                    movimentacoes,
+                    usuarios,
+                    sessoes
+                );
+
+            servidor.createContext(
+                "/api/produtos",
+                produtosHandler
+            );
+
+            servidor.createContext(
+                "/api/categorias",
+                produtosHandler
+            );
+
+            // LOTES
+
+            LotesHandler lotesHandler =
+                new LotesHandler(
+                    lotes,
+                    produtos,
+                    movimentacoes,
+                    usuarios,
+                    sessoes
+                );
+
+            servidor.createContext(
+                "/api/lotes",
+                lotesHandler
+            );
+
+            // PRÓXIMOS VENCIMENTOS
+
+            // Rota antiga mantida para outras telas
+            servidor.createContext(
+                "/api/lotes/proximos-vencimento",
+                new ProximosVencimentoHandler(
+                    lotes,
+                    produtos
+                )
+            );
+
+            // MOVIMENTAÇÕES
+
+            // Mantém a integração atual
+            servidor.createContext(
+                "/api/movimentacoes",
+                new MovimentacoesHandler(
+                    cliente,
+                    lotes,
+                    movimentacoes
+                )
+            );
+
+            // HISTÓRICO DE DESPERDÍCIO
+
+            servidor.createContext(
+                "/api/saidas",
+                new controller.HistoricoDespHandler(
+                    banco
+                )
+            );
+
+            // ENCERRAMENTO SEGURO
+
+            Runtime.getRuntime().addShutdownHook(
+                new Thread(() -> {
+
+                    servidor.stop(0);
+                    cliente.close();
+                })
+            );
+
+            // INICIALIZAÇÃO DO SERVIDOR
+
+            servidor.start();
+
+            System.out.println(
+                "Servidor iniciado em http://localhost:8080/"
+            );
+
+            System.out.println(
+                "MongoDB conectado com sucesso!"
+            );
 
                         System.out.println(
                                         "MongoDB conectado com sucesso!");

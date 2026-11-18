@@ -1,326 +1,818 @@
-// Dados de exemplo. Depois, estes valores virão do banco de dados.
-const API_URL = "http://localhost:8080";
 
-const opcoesPizza = {
-  chart: {
-    type: "pie",
-    height: 280,
-    toolbar: { show: false },
-  },
-  series: [],
-  labels: [],
-  colors: ["#269DD8", "#5145AC", "#E5602D", "#16A34A"],
-  legend: { position: "bottom" },
-  noData: {
-    text: "Nenhum desperdício registrado",
-  },
-  dataLabels: { enabled: false },
-  stroke: { width: 0 },
-};
+document.addEventListener("DOMContentLoaded", async () => {
 
-const graficoPizza = new ApexCharts(
-  document.querySelector("#pizza-chart"),
-  opcoesPizza,
-);
-graficoPizza.render();
+    // CONFIGURAÇÕES
 
-const opcoesBarras = {
-  chart: {
-    type: "bar",
-    height: 280,
-    toolbar: { show: false },
-  },
-  series: [{ name: "Quantidade Desperdiçada", data: [] }],
-  noData: {
-    text: "Nenhum desperdício registrado",
-  },
-  xaxis: {
-    categories: [],
-    labels: { style: { fontWeight: 400 } },
-  },
-  yaxis: {
-    min: 0,
-    labels: { style: { fontWeight: 400 } },
-  },
-  colors: ["#16474C"],
-  plotOptions: { bar: { columnWidth: "65%" } },
-  dataLabels: { enabled: false },
-  legend: { show: true, showForSingleSeries: true, position: "bottom" },
-};
+    const API_URL = "http://localhost:8080";
+    const PAGINA_LOGIN = "login-usuario.html";
 
-const graficoBarras = new ApexCharts(
-  document.querySelector("#barras-chart"),
-  opcoesBarras,
-);
+    // ELEMENTOS DA TELA
 
-async function carregarIndicadoresRelatorios() {
-  try {
-    const resposta = await fetch(
-      "http://localhost:8080/api/relatorios/indicadores",
-    );
+    const indicadorDesperdicados =
+        document.getElementById("indicador-desperdicados");
 
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar indicadores");
+    const indicadorRegistrados =
+        document.getElementById("indicador-registrados");
+
+    const indicadorPerdas =
+        document.getElementById("indicador-perdas");
+
+    const indicadorMotivo =
+        document.getElementById("indicador-motivo");
+
+    const filtroUnidade =
+        document.getElementById("filtro-unidade");
+
+    const botaoExportar =
+        document.getElementById("exportar-relatorio");
+
+    const mensagem =
+        document.getElementById("mensagemRelatorios");
+
+    let graficoPizza = null;
+    let graficoBarras = null;
+    let registrosPorProduto = [];
+    let exportando = false;
+
+    // AUTENTICAÇÃO
+
+    // Recupera o token da conta logada
+    function obterToken() {
+        return sessionStorage.getItem("token");
     }
 
-    const dados = await resposta.json();
+    // Limpa a sessão e retorna ao login
+    function encerrarAcesso() {
 
-    document.querySelector("#indicador-desperdicados").textContent =
-      dados.desperdicados;
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
 
-    document.querySelector("#indicador-registrados").textContent =
-      dados.registrados;
-
-    document.querySelector("#indicador-motivo").textContent =
-      dados.motivoMaisFrequente ?? "Nenhum";
-
-    // Converte o Decimal128 recebido do MongoDB
-    const valorPerdas =
-      dados.perdasFinanceiras?.$numberDecimal ?? dados.perdasFinanceiras;
-
-    // Formata o valor como moeda brasileira
-    const perdasFormatadas = new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(Number(valorPerdas));
-
-    document.querySelector("#indicador-perdas").textContent = perdasFormatadas;
-  } catch (erro) {
-    console.error("Erro ao carregar indicadores:", erro);
-  }
-}
-
-async function carregarGraficoMotivos() {
-  try {
-    const resposta = await fetch(
-      `${API_URL}/api/relatorios/desperdicios/por-motivo`,
-    );
-
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar desperdícios por motivo");
+        window.location.replace(PAGINA_LOGIN);
     }
 
-    const dados = await resposta.json();
+    // REQUISIÇÕES AUTENTICADAS
 
-    const registro = Array.isArray(dados)
-      ? dados
-      : Object.values(dados).find(Array.isArray);
+    // Envia o token nas consultas à API
+    async function requisicaoAutenticada(url, opcoes = {}) {
 
-    if (!registro) {
-      throw new Error("Formato inesperado na resposta");
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+
+            encerrarAcesso();
+
+            throw new Error("Sessão não encontrada.");
+        }
+
+        const headers = new Headers(opcoes.headers || {});
+
+        headers.set("Authorization", `Bearer ${token}`);
+
+        const resposta = await fetch(url, {
+            ...opcoes,
+            headers,
+            cache: "no-store"
+        });
+
+        // Sessão expirada
+        if (resposta.status === 401) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sua sessão expirou. Faça login novamente."
+            );
+        }
+
+        // Acesso negado
+        if (resposta.status === 403) {
+
+            throw new Error(
+                "Você não tem permissão para esta operação."
+            );
+        }
+
+        return resposta;
     }
 
-    const motivos = registro.map((registro) => registro.motivo);
+    // LER RESPOSTA DO BACKEND
 
-    const ocorrencias = registro.map((registro) =>
-      Number(registro.totalOcorrencias),
-    );
+    async function lerResposta(resposta) {
 
-    graficoPizza.updateOptions({
-      labels: motivos,
-    });
+        const texto = await resposta.text();
+        let dados = {};
 
-    graficoPizza.updateSeries(ocorrencias);
-  } catch (error) {
-    console.log("Erro ao carregar gráfico por motivos: ", error);
-  }
-}
+        if (texto) {
 
-async function carregarGraficoProdutos() {
-  try {
-    const resposta = await fetch(
-      `${API_URL}/api/relatorios/desperdicios/por-produto`,
-    );
+            try {
+                dados = JSON.parse(texto);
+            } catch {
+                dados = { mensagem: texto };
+            }
+        }
 
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar desperdícios por produto");
+        if (!resposta.ok) {
+
+            throw new Error(
+                dados.mensagem ||
+                `Erro HTTP ${resposta.status}`
+            );
+        }
+
+        return dados;
     }
 
-    const dados = await resposta.json();
+    // MENSAGENS DE ERRO
 
-    const registros = dados.desperdiciosPorProduto;
+    function mostrarErro(texto) {
 
-    if (!Array.isArray(registros)) {
-      throw new Error("Formato inesperado na resposta da API");
+        mensagem.textContent = texto;
+        mensagem.classList.remove("hidden");
     }
 
-    const filtroUnidade = document.querySelector("#filtro-unidade");
+    function limparErro() {
 
-    // Obtém as unidades disponíveis sem repetições
-    const unidades = [
-      ...new Set(registros.map((registro) => registro.unidadeMedida)),
-    ].filter(Boolean);
-
-    filtroUnidade.replaceChildren();
-
-    if (unidades.length === 0) {
-      filtroUnidade.disabled = true;
-      return;
+        mensagem.textContent = "";
+        mensagem.classList.add("hidden");
     }
 
-    // Cria as opções do select
-    for (const unidade of unidades) {
-      const opcao = document.createElement("option");
+    // CONVERTER NÚMEROS DO MONGODB
 
-      opcao.value = unidade;
-      opcao.textContent = unidade;
+    // Aceita valores comuns e Decimal128
+    function converterNumero(valor) {
 
-      filtroUnidade.appendChild(opcao);
+        if (
+            valor != null &&
+            typeof valor === "object" &&
+            "$numberDecimal" in valor
+        ) {
+            valor = valor.$numberDecimal;
+        }
+
+        const numero = Number(valor);
+
+        return Number.isFinite(numero)
+            ? numero
+            : 0;
     }
 
-    // Atualiza o gráfico de acordo com a unidade escolhida
-    function atualizarBarras() {
-      const unidadeSelecionada = filtroUnidade.value;
+    // FORMATAR MOEDA
 
-      const produtosFiltrados = registros.filter(
-        (registro) => registro.unidadeMedida === unidadeSelecionada,
-      );
+    function formatarMoeda(valor) {
 
-      const nomes = produtosFiltrados.map((registro) => registro.nome);
+        const numero = converterNumero(valor);
 
-      const quantidades = produtosFiltrados.map((registro) =>
-        Number(
-          registro.quantidadeTotal?.$numberDecimal ?? registro.quantidadeTotal,
-        ),
-      );
+        return new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL"
+        }).format(numero);
+    }
 
-      graficoBarras.updateOptions({
-        xaxis: {
-          categories: nomes,
+    // CONFIGURAÇÕES DO GRÁFICO PIZZA
+
+    const opcoesPizza = {
+
+        chart: {
+            type: "pie",
+            height: 280,
+            toolbar: {
+                show: false
+            }
         },
-        series: [
-          {
-            name: `Quantidade desperdiçada (${unidadeSelecionada})`,
-            data: quantidades,
-          },
+
+        series: [],
+        labels: [],
+
+        colors: [
+            "#269DD8",
+            "#5145AC",
+            "#E5602D",
+            "#16A34A"
         ],
-      });
+
+        legend: {
+            position: "bottom"
+        },
+
+        noData: {
+            text: "Nenhum desperdício registrado"
+        },
+
+        dataLabels: {
+            enabled: false
+        },
+
+        stroke: {
+            width: 0
+        }
+    };
+
+    // CONFIGURAÇÕES DO GRÁFICO DE BARRAS
+
+    const opcoesBarras = {
+
+        chart: {
+            type: "bar",
+            height: 280,
+
+            toolbar: {
+                show: false
+            }
+        },
+
+        series: [
+            {
+                name: "Quantidade Desperdiçada",
+                data: []
+            }
+        ],
+
+        noData: {
+            text: "Nenhum desperdício registrado"
+        },
+
+        xaxis: {
+            categories: [],
+
+            labels: {
+                style: {
+                    fontWeight: 400
+                }
+            }
+        },
+
+        yaxis: {
+            min: 0,
+
+            labels: {
+                style: {
+                    fontWeight: 400
+                }
+            }
+        },
+
+        colors: ["#16474C"],
+
+        plotOptions: {
+            bar: {
+                columnWidth: "65%"
+            }
+        },
+
+        dataLabels: {
+            enabled: false
+        },
+
+        legend: {
+            show: true,
+            showForSingleSeries: true,
+            position: "bottom"
+        }
+    };
+
+    // INICIALIZAR GRÁFICOS
+
+    async function iniciarGraficos() {
+
+        if (typeof ApexCharts === "undefined") {
+
+            mostrarErro(
+                "Não foi possível carregar a biblioteca dos gráficos."
+            );
+
+            return;
+        }
+
+        const elementoPizza =
+            document.getElementById("pizza-chart");
+
+        const elementoBarras =
+            document.getElementById("barras-chart");
+
+        graficoPizza = new ApexCharts(
+            elementoPizza,
+            opcoesPizza
+        );
+
+        graficoBarras = new ApexCharts(
+            elementoBarras,
+            opcoesBarras
+        );
+
+        await Promise.all([
+            graficoPizza.render(),
+            graficoBarras.render()
+        ]);
     }
 
-    // Atualiza quando o usuário troca a unidade
-    filtroUnidade.addEventListener("change", atualizarBarras);
+    // CARREGAR INDICADORES
 
-    // Exibe os dados assim que carregar
-    atualizarBarras();
-  } catch (erro) {
-    console.error("Erro ao carregar gráfico por produto:", erro);
-    graficoBarras.updateOptions({
-      noData: { text: "Erro ao carregar os dados" },
-    });
-  }
-}
+    // Consulta somente os indicadores da conta
+    async function carregarIndicadoresRelatorios() {
 
-// Arredonda para centavos sem converter os decimais da API em ponto flutuante.
-function formatarMoedaCSV(valor) {
-  if (valor == null) return "Não disponível";
+        try {
 
-  const partes = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(valor));
-  if (!partes) throw new Error("Valor monetário inválido no relatório");
+            const resposta = await requisicaoAutenticada(
+                `${API_URL}/api/relatorios/indicadores`
+            );
 
-  const [, sinal, inteiro, fracao = ""] = partes;
-  let centavos = BigInt(inteiro) * 100n + BigInt((fracao + "00").slice(0, 2));
-  if (fracao.length > 2 && fracao[2] >= "5") centavos += 1n;
+            const dados = await lerResposta(resposta);
 
-  const reais = (centavos / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const casas = (centavos % 100n).toString().padStart(2, "0");
-  return `R$ ${sinal && centavos !== 0n ? "-" : ""}${reais},${casas}`;
-}
+            indicadorDesperdicados.textContent =
+                dados.desperdicados ?? 0;
 
-function gerarCsvFinanceiro(produtos) {
-  const linhas = [[
-    "Produto",
-    "Qtd. Desperdiçada",
-    "Valor unit.",
-    "Valor total p/ estoque",
-    "Valor perdido",
-  ]];
+            indicadorRegistrados.textContent =
+                dados.registrados ?? 0;
 
-  for (const produto of produtos) {
-    const quantidade = String(produto.quantidadeDesperdicada ?? "");
-    if (!/^-?\d+(?:\.\d+)?$/.test(quantidade)) {
-      throw new Error("Quantidade inválida no relatório");
+            indicadorMotivo.textContent =
+                dados.motivoMaisFrequente || "Nenhum";
+
+            indicadorPerdas.textContent =
+                formatarMoeda(
+                    dados.perdasFinanceiras
+                );
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar indicadores:",
+                erro
+            );
+
+            mostrarErro(erro.message);
+        }
     }
 
-    linhas.push([
-      `${produto.nome ?? ""}${produto.unidadeMedida ? ` (${produto.unidadeMedida})` : ""}`,
-      quantidade.replace(".", ","),
-      formatarMoedaCSV(produto.valorUnitario),
-      formatarMoedaCSV(produto.valorTotalEstoque),
-      formatarMoedaCSV(produto.valorPerdido),
-    ]);
-  }
+    // CARREGAR GRÁFICO DE MOTIVOS
 
-  return "\uFEFF" + linhas.map((linha) => linha.map((valor) => {
-    let texto = String(valor);
-    // Também protege fórmulas precedidas por espaços ou caracteres de controle.
-    if (/^[\s\u0000-\u001f]*[=+\-@]|^[\t\r\n]/u.test(texto)) {
-      texto = "'" + texto;
+    async function carregarGraficoMotivos() {
+
+        try {
+
+            const resposta = await requisicaoAutenticada(
+                `${API_URL}/api/relatorios/desperdicios/por-motivo`
+            );
+
+            const dados = await lerResposta(resposta);
+
+            const registros =
+                dados.desperdiciosPorMotivo || [];
+
+            if (!Array.isArray(registros)) {
+
+                throw new Error(
+                    "Formato inesperado dos motivos."
+                );
+            }
+
+            const motivos = registros.map(
+                (registro) =>
+                    registro.motivo || "Não informado"
+            );
+
+            const ocorrencias = registros.map(
+                (registro) =>
+                    converterNumero(
+                        registro.totalOcorrencias
+                    )
+            );
+
+            if (graficoPizza) {
+
+                await graficoPizza.updateOptions({
+                    labels: motivos
+                });
+
+                await graficoPizza.updateSeries(
+                    ocorrencias
+                );
+            }
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar motivos:",
+                erro
+            );
+
+            mostrarErro(erro.message);
+        }
     }
-    return `"${texto.replace(/"/g, '""')}"`;
-  }).join(";")).join("\r\n");
-}
 
-async function exportarRelatorio() {
-  const botao = document.querySelector("#exportar-relatorio");
-  if (botao.disabled) return;
-  const textoOriginal = botao.textContent;
+    // ATUALIZAR GRÁFICO DE PRODUTOS
 
-  botao.disabled = true;
-  botao.textContent = "Exportando...";
+    // Filtra as quantidades pela unidade escolhida
+    async function atualizarBarras() {
 
-  try {
-    const resposta = await fetch(
-      `${API_URL}/api/relatorios/financeiro-por-produto`,
+        if (!graficoBarras) {
+            return;
+        }
+
+        const unidadeSelecionada =
+            filtroUnidade.value;
+
+        const filtrados = registrosPorProduto.filter(
+            (registro) =>
+                registro.unidadeMedida === unidadeSelecionada
+        );
+
+        const nomes = filtrados.map(
+            (registro) => registro.nome || "Sem nome"
+        );
+
+        const quantidades = filtrados.map(
+            (registro) =>
+                converterNumero(
+                    registro.quantidadeTotal
+                )
+        );
+
+        await graficoBarras.updateOptions({
+
+            xaxis: {
+                categories: nomes
+            },
+
+            series: [
+                {
+                    name:
+                        `Quantidade desperdiçada (${unidadeSelecionada})`,
+
+                    data: quantidades
+                }
+            ]
+        });
+    }
+
+    // CARREGAR GRÁFICO DE PRODUTOS
+
+    async function carregarGraficoProdutos() {
+
+        try {
+
+            const resposta = await requisicaoAutenticada(
+                `${API_URL}/api/relatorios/desperdicios/por-produto`
+            );
+
+            const dados = await lerResposta(resposta);
+
+            const registros =
+                dados.desperdiciosPorProduto;
+
+            if (!Array.isArray(registros)) {
+
+                throw new Error(
+                    "Formato inesperado do relatório por produto."
+                );
+            }
+
+            registrosPorProduto = registros;
+
+            // BUSCAR UNIDADES DISPONÍVEIS
+
+            const unidades = [
+                ...new Set(
+                    registros.map(
+                        (registro) =>
+                            registro.unidadeMedida
+                    )
+                )
+            ].filter(Boolean);
+
+            unidades.sort(
+                (a, b) => a.localeCompare(b, "pt-BR")
+            );
+
+            filtroUnidade.replaceChildren();
+
+            // NENHUM DESPERDÍCIO
+
+            if (unidades.length === 0) {
+
+                const opcao =
+                    document.createElement("option");
+
+                opcao.value = "";
+                opcao.textContent = "Sem dados";
+
+                filtroUnidade.appendChild(opcao);
+                filtroUnidade.disabled = true;
+
+                if (graficoBarras) {
+
+                    await graficoBarras.updateOptions({
+                        xaxis: {
+                            categories: []
+                        },
+                        series: [
+                            {
+                                name: "Quantidade Desperdiçada",
+                                data: []
+                            }
+                        ]
+                    });
+                }
+
+                return;
+            }
+
+            // CRIAR OPÇÕES DO FILTRO
+
+            unidades.forEach((unidade) => {
+
+                const opcao =
+                    document.createElement("option");
+
+                opcao.value = unidade;
+                opcao.textContent = unidade;
+
+                filtroUnidade.appendChild(opcao);
+            });
+
+            filtroUnidade.disabled = false;
+
+            // Exibe a primeira unidade encontrada
+            await atualizarBarras();
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar produtos:",
+                erro
+            );
+
+            mostrarErro(erro.message);
+        }
+    }
+
+    // EVENTO DO FILTRO
+
+    filtroUnidade.addEventListener(
+        "change",
+        atualizarBarras
     );
 
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar o relatório financeiro");
+    // FORMATAR MOEDA PARA CSV
+
+    // Preserva a precisão dos valores monetários
+    function formatarMoedaCSV(valor) {
+
+        if (valor == null) {
+            return "Não disponível";
+        }
+
+        const partes =
+            /^(-?)(\d+)(?:\.(\d+))?$/.exec(
+                String(valor)
+            );
+
+        if (!partes) {
+
+            throw new Error(
+                "Valor monetário inválido no relatório."
+            );
+        }
+
+        const [, sinal, inteiro, fracao = ""] = partes;
+
+        let centavos =
+            BigInt(inteiro) * 100n +
+            BigInt((fracao + "00").slice(0, 2));
+
+        if (
+            fracao.length > 2 &&
+            fracao[2] >= "5"
+        ) {
+            centavos += 1n;
+        }
+
+        const reais = (centavos / 100n)
+            .toString()
+            .replace(
+                /\B(?=(\d{3})+(?!\d))/g,
+                "."
+            );
+
+        const casas = (centavos % 100n)
+            .toString()
+            .padStart(2, "0");
+
+        return `R$ ${
+            sinal && centavos !== 0n ? "-" : ""
+        }${reais},${casas}`;
     }
 
-    const dados = await resposta.json();
-    const produtos = dados.financeiroPorProduto;
+    // GERAR ARQUIVO CSV
 
-    if (!Array.isArray(produtos)) {
-      throw new Error("Formato inesperado do relatório financeiro");
+    function gerarCsvFinanceiro(produtos) {
+
+        const linhas = [[
+            "Produto",
+            "Qtd. Desperdiçada",
+            "Valor unit.",
+            "Valor total p/ estoque",
+            "Valor perdido"
+        ]];
+
+        for (const produto of produtos) {
+
+            const quantidade = String(
+                produto.quantidadeDesperdicada ?? ""
+            );
+
+            if (
+                !/^-?\d+(?:\.\d+)?$/.test(
+                    quantidade
+                )
+            ) {
+
+                throw new Error(
+                    "Quantidade inválida no relatório."
+                );
+            }
+
+            linhas.push([
+                `${produto.nome ?? ""}${
+                    produto.unidadeMedida
+                        ? ` (${produto.unidadeMedida})`
+                        : ""
+                }`,
+
+                quantidade.replace(".", ","),
+
+                formatarMoedaCSV(
+                    produto.valorUnitario
+                ),
+
+                formatarMoedaCSV(
+                    produto.valorTotalEstoque
+                ),
+
+                formatarMoedaCSV(
+                    produto.valorPerdido
+                )
+            ]);
+        }
+
+        // Protege textos que poderiam ser interpretados
+        // como fórmulas ao abrir o CSV
+        return "\uFEFF" + linhas.map((linha) =>
+
+            linha.map((valor) => {
+
+                let texto = String(valor);
+
+                if (
+                    /^[\s\u0000-\u001f]*[=+\-@]|^[\t\r\n]/u
+                        .test(texto)
+                ) {
+                    texto = "'" + texto;
+                }
+
+                return `"${texto.replace(/"/g, '""')}"`;
+
+            }).join(";")
+
+        ).join("\r\n");
     }
 
-    if (produtos.length === 0) {
-      alert("Não existem desperdícios para exportar.");
-      return;
+    // EXPORTAR RELATÓRIO
+
+    async function exportarRelatorio() {
+
+        if (exportando) {
+            return;
+        }
+
+        exportando = true;
+
+        const textoOriginal =
+            botaoExportar.textContent;
+
+        botaoExportar.disabled = true;
+        botaoExportar.textContent = "Exportando...";
+
+        try {
+
+            const resposta = await requisicaoAutenticada(
+                `${API_URL}/api/relatorios/financeiro-por-produto`
+            );
+
+            const dados = await lerResposta(resposta);
+
+            const produtos =
+                dados.financeiroPorProduto;
+
+            if (!Array.isArray(produtos)) {
+
+                throw new Error(
+                    "Formato inesperado do relatório financeiro."
+                );
+            }
+
+            if (produtos.length === 0) {
+
+                alert(
+                    "Não existem desperdícios para exportar."
+                );
+
+                return;
+            }
+
+            // CRIAR CSV
+
+            const arquivo = new Blob(
+                [gerarCsvFinanceiro(produtos)],
+                {
+                    type: "text/csv;charset=utf-8;"
+                }
+            );
+
+            const url = URL.createObjectURL(
+                arquivo
+            );
+
+            // INICIAR DOWNLOAD
+
+            const link = document.createElement("a");
+
+            link.href = url;
+
+            link.download =
+                "relatorio-desperdicios.csv";
+
+            document.body.appendChild(link);
+
+            link.click();
+            link.remove();
+
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 1000);
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao exportar relatório:",
+                erro
+            );
+
+            mostrarErro(erro.message);
+
+            alert(
+                "Não foi possível exportar o relatório."
+            );
+
+        } finally {
+
+            exportando = false;
+            botaoExportar.disabled = false;
+
+            botaoExportar.textContent =
+                textoOriginal;
+        }
     }
 
-    // Cria o arquivo
-    const arquivo = new Blob([gerarCsvFinanceiro(produtos)], {
-      type: "text/csv;charset=utf-8;",
-    });
+    botaoExportar.addEventListener(
+        "click",
+        exportarRelatorio
+    );
 
-    const url = URL.createObjectURL(arquivo);
+    // INICIALIZAR RELATÓRIOS
 
-    // Inicia o download
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "relatorio-desperdicios.csv";
+    async function iniciar() {
 
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+        if (!obterToken()) {
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (erro) {
-    console.error("Erro ao exportar relatório:", erro);
-    alert("Não foi possível exportar o relatório.");
-  } finally {
-    botao.disabled = false;
-    botao.textContent = textoOriginal;
-  }
-}
+            encerrarAcesso();
 
-document
-  .querySelector("#exportar-relatorio")
-  .addEventListener("click", exportarRelatorio);
+            return;
+        }
 
-carregarIndicadoresRelatorios();
-carregarGraficoMotivos();
-graficoBarras.render().then(() => {
-  carregarGraficoProdutos();
+        limparErro();
+
+        // Cria os gráficos antes de atualizar os dados
+        try {
+
+            await iniciarGraficos();
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao iniciar gráficos:",
+                erro
+            );
+
+            mostrarErro(erro.message);
+        }
+
+        // Busca os relatórios da conta autenticada
+        await Promise.all([
+            carregarIndicadoresRelatorios(),
+            carregarGraficoMotivos(),
+            carregarGraficoProdutos()
+        ]);
+    }
+
+    iniciar();
 });

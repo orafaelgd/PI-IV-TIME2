@@ -1,117 +1,183 @@
-<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ALTERE O NOME EM CADA PÁGINA -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
     <title>Dashboard | Gestão de Desperdício</title>
 
-    <link rel="stylesheet" href="../../public/css/style.css" />
-  </head>
+    <!-- ESTILIZAÇÃO -->
+    <link rel="stylesheet" href="../../public/css/style.css">
+</head>
 
-  <body class="flex min-h-screen flex-col bg-background md:flex-row">
-    <aside id="aside-placeholder" class="w-full shrink-0 md:w-[180px]"></aside>
+<body class="flex min-h-screen flex-col bg-background md:flex-row">
 
+    <!-- MENU LATERAL -->
+    <aside id="aside-placeholder"
+        class="w-full shrink-0 md:w-[180px]"></aside>
+
+    <!-- CONTEÚDO PRINCIPAL -->
     <div class="flex min-w-0 flex-1 flex-col">
-      <div id="header-placeholder"></div>
 
-      <main class="flex-1">
-        <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
-          <div class="rounded-lg bg-white p-4 sm:mt-3 sm:min-h-[150px]">
-            <div
-              class="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:gap-x-5"
-            >
-              <h1 class="text-xl text-text sm:text-2xl">Olá,</h1>
-              <p
-                id="nome-usuario"
-                class="min-w-0 max-w-full break-words text-3xl font-bold text-text-secondary sm:text-4xl lg:text-5xl"
-              >
-                Carregando...
-              </p>
+        <!-- CABEÇALHO -->
+        <div id="header-placeholder"></div>
+
+        <main class="flex-1">
+
+            <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
+
+                <!-- SAUDAÇÃO DO USUÁRIO -->
+                <section
+                    class="rounded-lg bg-white p-4 sm:mt-3 sm:min-h-[150px]">
+
+                    <div
+                        class="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:gap-x-5">
+
+                        <h1 class="text-xl text-text sm:text-2xl">
+                            Olá,
+                        </h1>
+
+                        <!-- NOME DA CONTA AUTENTICADA -->
+                        <p id="nome-usuario"
+                            class="min-w-0 max-w-full break-words text-3xl font-bold text-text-secondary sm:text-4xl lg:text-5xl">
+                            Carregando...
+                        </p>
+                    </div>
+
+                    <!-- ATALHOS -->
+                    <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
+
+                        <!-- TODOS OS PRODUTOS -->
+                        <a href="todos-produtos.html"
+                            class="cursor-pointer rounded-sm bg-primary px-2 py-1 text-white hover:bg-primary-dark">
+                            Produtos
+                        </a>
+
+                        <!-- PRÓXIMOS VENCIMENTOS -->
+                        <a href="#secao-vencimentos"
+                            class="cursor-pointer rounded-sm bg-primary px-2 py-1 text-white hover:bg-primary-dark">
+                            Próx. Vencimento
+                        </a>
+                    </div>
+                </section>
+
+                <!-- CARDS DOS INDICADORES -->
+                <section
+                    aria-label="Indicadores do Dashboard"
+                    class="mt-5 flex flex-wrap items-stretch justify-center gap-5">
+
+                    <!-- TOTAL DE PRODUTOS -->
+                    <div
+                        class="flex min-h-[110px] w-full max-w-[280px] flex-col items-center justify-center rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl sm:w-60">
+
+                        <span id="total-produtos"
+                            class="text-xl font-bold">
+                            --
+                        </span>
+
+                        <span>produtos</span>
+                    </div>
+
+                    <!-- LOTES PRÓXIMOS DO VENCIMENTO -->
+                    <div
+                        class="flex min-h-[110px] w-full max-w-[280px] flex-col items-center justify-center rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl sm:w-60">
+
+                        <span id="lotes-proximos"
+                            class="text-xl font-bold">
+                            --
+                        </span>
+
+                        <span>
+                            lotes próx. vencimento
+                        </span>
+                    </div>
+
+                    <!-- OCORRÊNCIAS DE DESPERDÍCIO -->
+                    <div
+                        class="flex min-h-[110px] w-full max-w-[280px] flex-col items-center justify-center rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl sm:w-60">
+
+                        <span id="total-desperdicios"
+                            class="text-xl font-bold">
+                            --
+                        </span>
+
+                        <span>
+                            ocorrências de desperdício
+                        </span>
+                    </div>
+                </section>
+
+                <!-- PRÓXIMOS VENCIMENTOS -->
+                <section id="secao-vencimentos"
+                    class="mt-6 w-full rounded-xl bg-white px-5 py-4 text-text shadow-md sm:px-10">
+
+                    <h2 id="titulo-vencimentos"
+                        class="text-xs font-medium">
+                        Produtos próximos do Vencimento
+                    </h2>
+
+                    <!-- TABELA DE LOTES -->
+                    <div class="mx-auto mt-4 max-w-4xl overflow-x-auto">
+
+                        <table
+                            aria-labelledby="titulo-vencimentos"
+                            class="w-full min-w-[480px] table-fixed text-center text-sm font-semibold leading-tight">
+
+                            <thead class="sr-only">
+                                <tr>
+                                    <th scope="col">Produto</th>
+                                    <th scope="col">Quantidade</th>
+                                    <th scope="col">Validade</th>
+                                </tr>
+                            </thead>
+
+                            <!-- LOTES PRÓXIMOS DO VENCIMENTO -->
+                            <tbody id="tabela-proximos-vencimentos">
+
+                                <tr>
+                                    <td colspan="3"
+                                        class="px-3 py-4 text-center">
+                                        Carregando vencimentos...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- GRÁFICO DE DESPERDÍCIO -->
+                <section
+                    class="mt-6 w-full rounded-xl bg-white px-5 py-4 text-text shadow-md sm:px-10">
+
+                    <h2 class="text-xs font-medium">
+                        Desperdício nos últimos meses
+                    </h2>
+
+                    <!-- GRÁFICO APEXCHARTS -->
+                    <div id="area-chart"
+                        class="mt-4"
+                        aria-label="Gráfico de desperdício mensal">
+                    </div>
+                </section>
             </div>
+        </main>
 
-            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
-              <a
-                href="/views/pages/todos-produtos.html"
-                class="rounded-sm px-2 py-1 bg-primary text-white hover:bg-primary-dark cursor-pointer"
-              >
-                Produtos
-              </a>
-
-              <a
-                href="/views/pages/proximos-vencimento.html"
-                class="rounded-sm px-2 py-1 bg-primary text-white hover:bg-primary-dark cursor-pointer"
-              >
-                Próx. Vencimento
-              </a>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-8 mt-5 h-full justify-center">
-            <a
-              href="/views/pages/todos-produtos.html"
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <span id="total-produtos">--</span> produtos
-            </a>
-
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <span id="lotes-proximos">--</span> lotes próx. vencimento
-            </div>
-
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <span id="total-desperdicios">--</span> ocorrências de desperdício
-            </div>
-          </div>
-
-          <section
-            class="mt-6 w-full rounded-xl bg-white px-5 py-4 text-text shadow-md sm:px-10"
-          >
-            <h2 id="titulo-vencimentos" clas="text-xs font-medium">
-              Produtos próximos do Vencimento
-            </h2>
-
-            <div class="mx-auto mt-4 max-w-4xl">
-              <table
-                aria-labelledby="titulo-vencimentos"
-                class="w-full table-fixed text-center text-sm font-semibold leading-tight"
-              >
-                <thead class="sr-only">
-                  <tr>
-                    <th scope="col">Produto</th>
-                    <th scope="col">Produto</th>
-                    <th scope="col">Produto</th>
-                  </tr>
-                </thead>
-
-                <tbody id="tabela-proximos-vencimentos" class="divide-y divide-gray-200 [&_td]:p-3">
-                  <tr>
-                    <td colspan="3">Carregando vencimentos...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section
-            class="mt-6 w-full rounded-xl bg-white px-5 py-4 text-text shadow-md sm:px-10"
-          >
-            <h2 class="text-xs font-medium">Desperdício nos últimos meses</h2>
-            <!-- Gráfico -->
-            <div id="area-chart"></div>
-          </section>
-        </div>
-      </main>
-
-      <div id="footer-placeholder"></div>
+        <!-- RODAPÉ -->
+        <div id="footer-placeholder"></div>
     </div>
+
+    <!-- BIBLIOTECA DO GRÁFICO -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.46.0/dist/apexcharts.min.js"></script>
-    <script src="/public/js/dashboard-inicio.js"></script>
+
+    <!-- COMPONENTES DA PÁGINA -->
     <script src="../../public/js/load-partials.js"></script>
-  </body>
+
+    <!-- DASHBOARD -->
+    <script src="../../public/js/dashboard-inicio.js"></script>
+
+</body>
 </html>
