@@ -11,6 +11,7 @@ import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.IndexOptions;
 
 import org.bson.Document;
+import controller.LoginHandler;
 
 import controller.DashboardHandler;
 import controller.LotesHandler;
