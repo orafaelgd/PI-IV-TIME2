@@ -1,4 +1,6 @@
 
+// HISTÓRICO DE DESPERDÍCIO
+
 document.addEventListener("DOMContentLoaded", () => {
 
     // CONFIGURAÇÕES
@@ -8,11 +10,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ELEMENTOS DA TELA
 
-    const tabela =
-        document.getElementById("historico-desperdicio");
+    const tabela = document.getElementById(
+        "historico-desperdicio"
+    );
 
-    const mensagemErro =
-        document.getElementById("mensagemErroHistorico");
+    const mensagemErro = document.getElementById(
+        "mensagemErroHistorico"
+    );
 
     if (!tabela) {
 
@@ -25,14 +29,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // AUTENTICAÇÃO
 
-    // Recupera o token salvo no login
     function obterToken() {
 
         return sessionStorage.getItem("token");
     }
 
-    // Encerra a sessão local
-    function redirecionarLogin() {
+    // ENCERRAR ACESSO
+
+    function encerrarAcesso() {
 
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("usuario");
@@ -40,42 +44,31 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // REQUISIÇÕES AUTENTICADAS
+    // CONSULTAR API AUTENTICADA
 
-    // Envia o token em todas as consultas
-    async function requisicaoAutenticada(
-        url,
-        opcoes = {}
-    ) {
+    async function requisicaoAutenticada(url) {
 
         const token = obterToken();
 
         if (!token || !token.trim()) {
 
-            redirecionarLogin();
+            encerrarAcesso();
 
             throw new Error(
                 "Sessão não encontrada."
             );
         }
 
-        const headers = new Headers(
-            opcoes.headers || {}
-        );
-
-        headers.set(
-            "Authorization",
-            `Bearer ${token}`
-        );
-
-        headers.set(
-            "Accept",
-            "application/json"
-        );
-
+        // Envia o token da conta logada
         const resposta = await fetch(url, {
-            ...opcoes,
-            headers,
+
+            method: "GET",
+
+            headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/json"
+            },
+
             cache: "no-store"
         });
 
@@ -83,10 +76,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (resposta.status === 401) {
 
-            redirecionarLogin();
+            encerrarAcesso();
 
             throw new Error(
-                "Sessão expirada. Faça login novamente."
+                "Sessão inválida ou expirada."
             );
         }
 
@@ -102,11 +95,12 @@ document.addEventListener("DOMContentLoaded", () => {
         return resposta;
     }
 
-    // LER RESPOSTA DO BACKEND
+    // LER RESPOSTA
 
     async function lerResposta(resposta) {
 
         const texto = await resposta.text();
+
         let dados = {};
 
         if (texto) {
@@ -117,9 +111,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } catch {
 
-                dados = {
-                    mensagem: texto
-                };
+                throw new Error(
+                    "Resposta inválida do servidor."
+                );
             }
         }
 
@@ -134,49 +128,21 @@ document.addEventListener("DOMContentLoaded", () => {
         return dados;
     }
 
-    // MENSAGENS DE ERRO
-
-    function mostrarErro(texto) {
-
-        if (!mensagemErro) {
-            return;
-        }
-
-        mensagemErro.textContent = texto;
-        mensagemErro.classList.remove("hidden");
-    }
-
-    function limparErro() {
-
-        if (!mensagemErro) {
-            return;
-        }
-
-        mensagemErro.textContent = "";
-        mensagemErro.classList.add("hidden");
-    }
-
     // FORMATAR DATA
 
     function formatarData(data) {
 
-        if (!data) {
-            return "-";
-        }
+        if (!data) return "-";
 
-        // Datas enviadas somente no formato AAAA-MM-DD
-        if (
-            /^\d{4}-\d{2}-\d{2}$/.test(data)
-        ) {
+        // Data somente com ano, mês e dia
+        if (/^\d{4}-\d{2}-\d{2}$/.test(data)) {
 
-            const [ano, mes, dia] =
-                data.split("-");
+            const [ano, mes, dia] = data.split("-");
 
             return `${dia}/${mes}/${ano}`;
         }
 
-        const dataConvertida =
-            new Date(data);
+        const dataConvertida = new Date(data);
 
         if (
             Number.isNaN(
@@ -186,16 +152,14 @@ document.addEventListener("DOMContentLoaded", () => {
             return "-";
         }
 
-        // Usa o fuso horário do sistema
-        return new Intl.DateTimeFormat(
-            "pt-BR",
-            {
-                timeZone: "America/Sao_Paulo",
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric"
-            }
-        ).format(dataConvertida);
+        return new Intl.DateTimeFormat("pt-BR", {
+
+            timeZone: "America/Sao_Paulo",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric"
+
+        }).format(dataConvertida);
     }
 
     // FORMATAR QUANTIDADE
@@ -213,8 +177,15 @@ document.addEventListener("DOMContentLoaded", () => {
             return "-";
         }
 
-        const numero =
-            Number(quantidade);
+        // Aceita Decimal128 do MongoDB
+        if (
+            typeof quantidade === "object" &&
+            "$numberDecimal" in quantidade
+        ) {
+            quantidade = quantidade.$numberDecimal;
+        }
+
+        const numero = Number(quantidade);
 
         if (!Number.isFinite(numero)) {
             return "-";
@@ -230,7 +201,29 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${valor} ${unidade || ""}`.trim();
     }
 
-    // CRIAR CÉLULAS DA TABELA
+    // EXIBIR MENSAGEM DE ERRO
+
+    function mostrarErro(texto) {
+
+        if (!mensagemErro) return;
+
+        mensagemErro.textContent = texto;
+
+        mensagemErro.classList.remove("hidden");
+    }
+
+    // LIMPAR ERRO
+
+    function limparErro() {
+
+        if (!mensagemErro) return;
+
+        mensagemErro.textContent = "";
+
+        mensagemErro.classList.add("hidden");
+    }
+
+    // CRIAR CÉLULA
 
     function criarCelula(
         linha,
@@ -238,11 +231,9 @@ document.addEventListener("DOMContentLoaded", () => {
         centralizar = false
     ) {
 
-        const celula =
-            document.createElement("td");
+        const celula = document.createElement("td");
 
-        celula.textContent =
-            texto ?? "-";
+        celula.textContent = texto ?? "-";
 
         celula.className = centralizar
             ? "px-3 py-3 text-center font-semibold"
@@ -257,20 +248,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         tabela.replaceChildren();
 
-        const linha =
-            document.createElement("tr");
+        const linha = document.createElement("tr");
 
-        const celula =
-            document.createElement("td");
+        const coluna = document.createElement("td");
 
-        celula.colSpan = 5;
+        coluna.colSpan = 5;
 
-        celula.className =
+        coluna.textContent = texto;
+
+        coluna.className =
             "px-3 py-6 text-center text-text-secondary";
 
-        celula.textContent = texto;
+        linha.appendChild(coluna);
 
-        linha.appendChild(celula);
         tabela.appendChild(linha);
     }
 
@@ -280,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         tabela.replaceChildren();
 
-        // HISTÓRICO VAZIO
+        // NENHUM REGISTRO
 
         if (
             !Array.isArray(registros) ||
@@ -294,18 +284,17 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // CRIAR LINHAS DO HISTÓRICO
+        // CRIAR LINHAS
 
         registros.forEach((registro) => {
 
-            const linha =
-                document.createElement("tr");
+            const linha = document.createElement("tr");
 
-            // Mesmo visual de Todos os Produtos e Lotes
+            // Mantém o padrão visual já definido
             linha.className =
                 "border-b border-gray-300 bg-[#e9ebee] text-text";
 
-            // IDENTIFICAR RESPONSÁVEL
+            // RESPONSÁVEL
 
             const responsavel =
                 registro.origem === "AUTOMATICA"
@@ -321,7 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 "Produto não identificado"
             );
 
-            // QUANTIDADE DESPERDIÇADA
+            // QUANTIDADE
 
             criarCelula(
                 linha,
@@ -350,7 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 true
             );
 
-            // RESPONSÁVEL
+            // REGISTRADO POR
 
             criarCelula(
                 linha,
@@ -362,9 +351,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // CARREGAR HISTÓRICO
+    // CARREGAR HISTÓRICO DO MONGODB
 
-    // Consulta somente os registros da conta autenticada
     async function carregarHistorico() {
 
         limparErro();
@@ -380,7 +368,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let pagina = 1;
             let total = 0;
 
-            // BUSCAR TODAS AS PÁGINAS
+            // CONSULTAR TODAS AS PÁGINAS
 
             do {
 
@@ -391,6 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         somenteDesperdicio: "true"
                     });
 
+                // A API identifica o usuário pelo token
                 const resposta =
                     await requisicaoAutenticada(
                         `${API_URL}/api/saidas?${parametros.toString()}`
@@ -399,13 +388,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 const dados =
                     await lerResposta(resposta);
 
-                // VALIDAR DADOS
+                // VALIDAR RESPOSTA
 
                 if (
                     !Array.isArray(dados.itens) ||
-                    !Number.isFinite(
+                    !Number.isSafeInteger(
                         Number(dados.total)
-                    )
+                    ) ||
+                    Number(dados.total) < 0
                 ) {
 
                     throw new Error(
@@ -415,13 +405,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const itens = dados.itens;
 
-                total = Number(
-                    dados.total
-                );
+                total = Number(dados.total);
 
+                // O backend já filtra pela conta
                 registros.push(...itens);
 
-                // PROTEGER PAGINAÇÃO
+                // VALIDAR PAGINAÇÃO
 
                 if (
                     itens.length === 0 &&
@@ -435,21 +424,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 pagina++;
 
-            } while (
-                registros.length < total
+            } while (registros.length < total);
+
+            // MOSTRAR SOMENTE DESPERDÍCIOS
+
+            const desperdicios = registros.filter(
+                registro => registro.desperdicio === true
             );
 
-            // MOSTRAR DESPERDÍCIOS
-
-            const desperdicios =
-                registros.filter(
-                    (registro) =>
-                        registro.desperdicio === true
-                );
-
-            preencherTabela(
-                desperdicios
-            );
+            preencherTabela(desperdicios);
 
         } catch (erro) {
 
@@ -462,17 +445,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 "Não foi possível carregar o histórico."
             );
 
-            mostrarErro(
-                erro.message
-            );
+            mostrarErro(erro.message);
         }
     }
 
-    // INICIALIZAR TELA
+    // INICIALIZAÇÃO
 
     if (!obterToken()) {
 
-        redirecionarLogin();
+        encerrarAcesso();
+
         return;
     }
 

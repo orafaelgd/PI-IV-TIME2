@@ -18,16 +18,12 @@ import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
 public class HistoricoDespHandler implements HttpHandler {
-
-    // SERVIÇOS
-
-    private final HistoricoDespService service;
-    private final SessaoService sessaoService;
 
     // ORIGENS PERMITIDAS
 
@@ -36,40 +32,43 @@ public class HistoricoDespHandler implements HttpHandler {
         "http://127.0.0.1:5500"
     );
 
+    // SERVIÇOS
+
+    private final HistoricoDespService historicoService;
+    private final SessaoService sessaoService;
+
     // CONSTRUTOR
 
-    // Recebe o banco e as coleções de autenticação
     public HistoricoDespHandler(MongoDatabase banco) {
 
-        this.service = new HistoricoDespService(banco);
+        historicoService = new HistoricoDespService(banco);
 
-        this.sessaoService = new SessaoService(
+        sessaoService = new SessaoService(
             banco.getCollection("users"),
             banco.getCollection("sessoes")
         );
     }
 
-    // REQUISIÇÕES HTTP
+    // ATENDER REQUISIÇÕES
 
     @Override
-    public void handle(HttpExchange req) throws IOException {
+    public void handle(HttpExchange requisicao)
+            throws IOException {
 
-        String origem = req.getRequestHeaders()
+        String origem = requisicao
+            .getRequestHeaders()
             .getFirst("Origin");
 
         // VALIDAR ORIGEM
 
-        if (
-            origem != null &&
-            !ORIGENS.contains(origem)
-        ) {
+        if (origem != null && !ORIGENS.contains(origem)) {
+
             responder(
-                req, 403,
-                new Document(
-                    "mensagem",
-                    "Origem nao permitida."
-                )
+                requisicao,
+                403,
+                "Origem não permitida."
             );
+
             return;
         }
 
@@ -77,199 +76,213 @@ public class HistoricoDespHandler implements HttpHandler {
 
         if (origem != null) {
 
-            req.getResponseHeaders().set(
+            requisicao.getResponseHeaders().set(
                 "Access-Control-Allow-Origin",
                 origem
             );
 
-            req.getResponseHeaders().set(
+            requisicao.getResponseHeaders().set(
                 "Access-Control-Allow-Headers",
                 "Authorization, Content-Type"
             );
 
-            req.getResponseHeaders().set(
+            requisicao.getResponseHeaders().set(
                 "Access-Control-Allow-Methods",
                 "GET, OPTIONS"
             );
 
-            req.getResponseHeaders().set(
-                "Vary", "Origin"
+            requisicao.getResponseHeaders().set(
+                "Vary",
+                "Origin"
             );
         }
 
-        req.getResponseHeaders().set(
-            "Cache-Control", "no-store"
+        requisicao.getResponseHeaders().set(
+            "Cache-Control",
+            "no-store"
         );
 
-        // VERIFICAR ROTA
+        String metodo = requisicao.getRequestMethod();
 
-        if (
-            !"/api/saidas".equals(
-                req.getRequestURI().getPath()
-            )
-        ) {
+        String caminho = requisicao
+            .getRequestURI()
+            .getPath();
+
+        // VALIDAR ROTA
+
+        if (!"/api/saidas".equals(caminho)) {
+
             responder(
-                req, 404,
-                new Document(
-                    "mensagem",
-                    "Rota nao encontrada."
-                )
+                requisicao,
+                404,
+                "Rota não encontrada."
             );
+
             return;
         }
 
         // RESPONDER OPTIONS
 
-        if ("OPTIONS".equals(req.getRequestMethod())) {
-            req.sendResponseHeaders(204, -1);
-            req.close();
+        if ("OPTIONS".equals(metodo)) {
+
+            requisicao.sendResponseHeaders(204, -1);
+            requisicao.close();
+
             return;
         }
 
-        // VALIDAR MÉTODO
+        // PERMITIR SOMENTE GET
 
-        if (!"GET".equals(req.getRequestMethod())) {
+        if (!"GET".equals(metodo)) {
 
-            req.getResponseHeaders().set(
+            requisicao.getResponseHeaders().set(
                 "Allow",
                 "GET, OPTIONS"
             );
 
             responder(
-                req, 405,
-                new Document(
-                    "mensagem",
-                    "Metodo nao permitido."
-                )
+                requisicao,
+                405,
+                "Método não permitido."
             );
+
             return;
         }
 
         try {
 
-            // AUTENTICAR USUÁRIO
+            // AUTENTICAÇÃO DO USUÁRIO
 
-            // Valida o token usando o SessaoService
-            Document usuario = sessaoService.autenticar(req);
+            // O SessaoService valida o token e recupera
+            // o usuário real na coleção users.
+            Document usuario = sessaoService.autenticar(
+                requisicao
+            );
 
             if (
                 usuario == null ||
                 usuario.getObjectId("_id") == null
             ) {
+
                 responder(
-                    req, 401,
-                    new Document(
-                        "mensagem",
-                        "Sessao invalida ou expirada. Faca login novamente."
-                    )
+                    requisicao,
+                    401,
+                    "Sessão inválida ou expirada. Faça login novamente."
                 );
+
                 return;
             }
 
-            // Identifica a conta autenticada
+            // ID DA CONTA LOGADA
+
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
 
-            // LER FILTROS
+            // LOG DE CONFERÊNCIA
+
+            // Não imprime o token nem informações pessoais.
+            System.out.println(
+                "HISTÓRICO - Usuário autenticado: " +
+                usuarioId.toHexString()
+            );
+
+            // LER PARÂMETROS
 
             Map<String, String> parametros =
                 lerParametros(
-                    req.getRequestURI().getRawQuery()
+                    requisicao.getRequestURI().getRawQuery()
                 );
 
-            LocalDate inicio =
-                lerData(parametros.get("dataInicio"));
+            LocalDate inicio = lerData(
+                parametros.get("dataInicio")
+            );
 
-            LocalDate fim =
-                lerData(parametros.get("dataFim"));
+            LocalDate fim = lerData(
+                parametros.get("dataFim")
+            );
 
             int pagina = Integer.parseInt(
-                parametros.getOrDefault(
-                    "pagina", "1"
-                )
+                parametros.getOrDefault("pagina", "1")
             );
 
             int limite = Integer.parseInt(
-                parametros.getOrDefault(
-                    "limite", "20"
-                )
+                parametros.getOrDefault("limite", "20")
             );
 
-            String somenteTexto =
-                parametros.getOrDefault(
-                    "somenteDesperdicio",
-                    "false"
-                );
+            String somenteTexto = parametros.getOrDefault(
+                "somenteDesperdicio",
+                "true"
+            );
 
             if (
-                !somenteTexto.equals("true") &&
-                !somenteTexto.equals("false")
+                !"true".equals(somenteTexto) &&
+                !"false".equals(somenteTexto)
             ) {
+
                 throw new IllegalArgumentException(
-                    "Filtro somenteDesperdicio invalido."
+                    "Filtro somenteDesperdicio inválido."
                 );
             }
 
-            // CONSULTAR HISTÓRICO DA CONTA
+            // CONSULTAR HISTÓRICO DO USUÁRIO
 
-            Document resultado = service.consultarHistorico(
-                inicio,
-                fim,
-                parametros.get("motivo"),
-                pagina,
-                limite,
-                Boolean.parseBoolean(somenteTexto),
-                usuarioId
+            Document resultado =
+                historicoService.consultarHistorico(
+                    inicio,
+                    fim,
+                    parametros.get("motivo"),
+                    pagina,
+                    limite,
+                    Boolean.parseBoolean(somenteTexto),
+                    usuarioId
+                );
+
+            // RETORNAR RESULTADOS
+
+            responderJSON(
+                requisicao,
+                200,
+                resultado
             );
-
-            responder(req, 200, resultado);
 
         } catch (IllegalArgumentException erro) {
 
             responder(
-                req, 400,
-                new Document(
-                    "mensagem",
-                    "Filtros invalidos: " +
-                    erro.getMessage()
-                )
+                requisicao,
+                400,
+                erro.getMessage()
             );
 
         } catch (MongoException erro) {
 
             System.err.println(
-                "Erro MongoDB no historico: " +
+                "Erro MongoDB no histórico: " +
                 erro.getMessage()
             );
 
             responder(
-                req, 500,
-                new Document(
-                    "mensagem",
-                    "Erro ao acessar o banco de dados."
-                )
+                requisicao,
+                500,
+                "Erro ao acessar o banco de dados."
             );
 
         } catch (RuntimeException erro) {
 
             System.err.println(
-                "Erro ao consultar historico: " +
+                "Erro no histórico: " +
                 erro.getMessage()
             );
 
             responder(
-                req, 500,
-                new Document(
-                    "mensagem",
-                    "Erro ao consultar historico."
-                )
+                requisicao,
+                500,
+                "Erro interno ao consultar o histórico."
             );
         }
     }
 
-    // LER PARÂMETROS
+    // LER PARÂMETROS DA URL
 
-    // Converte os filtros da URL em um mapa
     private static Map<String, String> lerParametros(
         String query
     ) {
@@ -277,10 +290,7 @@ public class HistoricoDespHandler implements HttpHandler {
         Map<String, String> parametros =
             new HashMap<>();
 
-        if (
-            query == null ||
-            query.isEmpty()
-        ) {
+        if (query == null || query.isBlank()) {
             return parametros;
         }
 
@@ -290,7 +300,7 @@ public class HistoricoDespHandler implements HttpHandler {
 
             if (par.length != 2) {
                 throw new IllegalArgumentException(
-                    "Parametro invalido."
+                    "Parâmetro inválido."
                 );
             }
 
@@ -304,14 +314,11 @@ public class HistoricoDespHandler implements HttpHandler {
                 StandardCharsets.UTF_8
             );
 
-            // Impede parâmetros duplicados
-            if (
-                parametros.putIfAbsent(
-                    nome, valor
-                ) != null
-            ) {
+            // Não permite parâmetros duplicados.
+            if (parametros.putIfAbsent(nome, valor) != null) {
+
                 throw new IllegalArgumentException(
-                    "Parametro duplicado."
+                    "Parâmetro duplicado."
                 );
             }
         }
@@ -323,15 +330,41 @@ public class HistoricoDespHandler implements HttpHandler {
 
     private static LocalDate lerData(String valor) {
 
-        return valor == null
-            ? null
-            : LocalDate.parse(valor);
+        if (valor == null) {
+            return null;
+        }
+
+        try {
+
+            return LocalDate.parse(valor);
+
+        } catch (DateTimeParseException erro) {
+
+            throw new IllegalArgumentException(
+                "Data inválida. Utilize AAAA-MM-DD."
+            );
+        }
     }
 
-    // RESPOSTAS HTTP
+    // RESPONDER COM MENSAGEM
 
     private static void responder(
-        HttpExchange req,
+        HttpExchange requisicao,
+        int status,
+        String mensagem
+    ) throws IOException {
+
+        responderJSON(
+            requisicao,
+            status,
+            new Document("mensagem", mensagem)
+        );
+    }
+
+    // RESPONDER JSON
+
+    private static void responderJSON(
+        HttpExchange requisicao,
         int status,
         Document dados
     ) throws IOException {
@@ -339,20 +372,19 @@ public class HistoricoDespHandler implements HttpHandler {
         byte[] resposta = dados.toJson()
             .getBytes(StandardCharsets.UTF_8);
 
-        req.getResponseHeaders().set(
+        requisicao.getResponseHeaders().set(
             "Content-Type",
             "application/json; charset=UTF-8"
         );
 
-        req.sendResponseHeaders(
+        requisicao.sendResponseHeaders(
             status,
             resposta.length
         );
 
-        try (
-            OutputStream saida =
-                req.getResponseBody()
-        ) {
+        try (OutputStream saida =
+                requisicao.getResponseBody()) {
+
             saida.write(resposta);
         }
     }
