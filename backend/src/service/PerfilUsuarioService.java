@@ -4,6 +4,7 @@ package service;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.UpdateResult;
 
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -17,10 +18,13 @@ import static com.mongodb.client.model.Filters.eq;
 
 public class PerfilUsuarioService {
 
+    // COLEÇÕES E SERVIÇOS
+
     private final MongoCollection<Document> usuarios;
     private final SessaoService sessaoService;
 
-    // Construtor
+    // CONSTRUTOR
+
     public PerfilUsuarioService(
         MongoCollection<Document> usuarios,
         SessaoService sessaoService
@@ -29,13 +33,31 @@ public class PerfilUsuarioService {
         this.sessaoService = sessaoService;
     }
 
-    // Atualizar e-mail ou celular do usuário
+    // IDENTIFICAR USUÁRIO
+
+    private static ObjectId obterIdUsuario(Document usuario) {
+
+        if (
+            usuario == null ||
+            usuario.getObjectId("_id") == null
+        ) {
+            throw new NoSuchElementException(
+                "Usuário não encontrado."
+            );
+        }
+
+        return usuario.getObjectId("_id");
+    }
+
+    // ATUALIZAR E-MAIL OU CELULAR
+
     public Document atualizarDados(
         Document usuario,
         Document dados
     ) {
 
-        // Verificar os dados recebidos
+        // VALIDAR CAMPOS RECEBIDOS
+
         if (
             dados == null ||
             dados.size() != 1 ||
@@ -49,7 +71,6 @@ public class PerfilUsuarioService {
             );
         }
 
-        // Identificar o campo que será atualizado
         String campo = dados.containsKey("email")
             ? "email"
             : "celular";
@@ -64,7 +85,8 @@ public class PerfilUsuarioService {
 
         String valor;
 
-        // Validar e-mail
+        // VALIDAR E-MAIL
+
         if ("email".equals(campo)) {
 
             valor = ((String) valorRecebido)
@@ -84,11 +106,12 @@ public class PerfilUsuarioService {
 
         } else {
 
-            // Remover caracteres da formatação do celular
+            // VALIDAR CELULAR
+
             valor = ((String) valorRecebido)
                 .replaceAll("\\D", "");
 
-            // Remover código do Brasil, se presente
+            // Remove o código do Brasil
             if (
                 valor.length() == 13 &&
                 valor.startsWith("55")
@@ -96,7 +119,6 @@ public class PerfilUsuarioService {
                 valor = valor.substring(2);
             }
 
-            // Validar celular com DDD
             if (!valor.matches("\\d{11}")) {
                 throw new IllegalArgumentException(
                     "Informe um celular válido com DDD."
@@ -104,18 +126,28 @@ public class PerfilUsuarioService {
             }
         }
 
-        // Identificar o usuário autenticado
-        ObjectId idUsuario = usuario.getObjectId("_id");
+        // USUÁRIO AUTENTICADO
 
-        // Atualizar o campo no MongoDB
-        usuarios.updateOne(
-            eq("_id", idUsuario),
+        ObjectId usuarioId =
+            obterIdUsuario(usuario);
+
+        // ATUALIZAR NO MONGODB
+
+        UpdateResult resultado = usuarios.updateOne(
+            eq("_id", usuarioId),
             Updates.set(campo, valor)
         );
 
-        // Consultar os dados atualizados
+        if (resultado.getMatchedCount() == 0) {
+            throw new NoSuchElementException(
+                "Usuário não encontrado."
+            );
+        }
+
+        // CONSULTAR DADOS ATUALIZADOS
+
         Document atualizado = usuarios.find(
-            eq("_id", idUsuario)
+            eq("_id", usuarioId)
         ).first();
 
         if (atualizado == null) {
@@ -124,7 +156,8 @@ public class PerfilUsuarioService {
             );
         }
 
-        // Retornar os dados atualizados
+        // RETORNAR DADOS PÚBLICOS
+
         return new Document(
             "mensagem",
             "Dados atualizados com sucesso!"
@@ -134,13 +167,15 @@ public class PerfilUsuarioService {
         );
     }
 
-    // Alterar a senha do usuário
+    // ALTERAR SENHA
+
     public Document alterarSenha(
         Document usuario,
         Document dados
     ) {
 
-        // Verificar os campos recebidos
+        // VALIDAR CAMPOS
+
         if (
             dados == null ||
             dados.size() != 2 ||
@@ -152,12 +187,34 @@ public class PerfilUsuarioService {
             );
         }
 
-        String senhaAtual = dados.getString("senhaAtual");
-        String novaSenha = dados.getString("novaSenha");
+        String senhaAtual =
+            dados.getString("senhaAtual");
 
-        String senhaHash = usuario.getString("senhaHash");
+        String novaSenha =
+            dados.getString("novaSenha");
 
-        // Validar a senha atual com BCrypt
+        ObjectId usuarioId =
+            obterIdUsuario(usuario);
+
+        // CONSULTAR SENHA ATUAL
+
+        // Busca novamente o hash para evitar usar
+        // informações desatualizadas da sessão
+        Document atual = usuarios.find(
+            eq("_id", usuarioId)
+        ).first();
+
+        if (atual == null) {
+            throw new NoSuchElementException(
+                "Usuário não encontrado."
+            );
+        }
+
+        String senhaHash =
+            atual.getString("senhaHash");
+
+        // VALIDAR SENHA ATUAL
+
         if (
             senhaAtual.isEmpty() ||
             senhaHash == null ||
@@ -168,56 +225,71 @@ public class PerfilUsuarioService {
             );
         }
 
-        // Validar o tamanho da nova senha
-        int tamanhoSenhaBytes = novaSenha
+        // VALIDAR NOVA SENHA
+
+        int tamanhoBytes = novaSenha
             .getBytes(StandardCharsets.UTF_8)
             .length;
 
         if (
             novaSenha.length() < 8 ||
             novaSenha.length() > 50 ||
-            tamanhoSenhaBytes > 72
+            tamanhoBytes > 72
         ) {
             throw new IllegalArgumentException(
                 "A nova senha deve ter de 8 a 50 caracteres e no máximo 72 bytes."
             );
         }
 
-        // Impedir a reutilização da senha atual
+        // IMPEDIR REUTILIZAÇÃO
+
         if (BCrypt.checkpw(novaSenha, senhaHash)) {
             throw new IllegalArgumentException(
                 "A nova senha deve ser diferente da atual."
             );
         }
 
-        // Identificar o usuário autenticado
-        ObjectId idUsuario = usuario.getObjectId("_id");
+        // GERAR HASH
 
-        // Gerar o novo hash BCrypt
         String novoHash = BCrypt.hashpw(
             novaSenha,
             BCrypt.gensalt(12)
         );
 
-        // Atualizar o hash no MongoDB
-        usuarios.updateOne(
-            eq("_id", idUsuario),
+        // SALVAR NOVA SENHA
+
+        // Garante que a senha anterior não mudou
+        // durante a operação
+        UpdateResult resultado = usuarios.updateOne(
+            com.mongodb.client.model.Filters.and(
+                eq("_id", usuarioId),
+                eq("senhaHash", senhaHash)
+            ),
             Updates.set("senhaHash", novoHash)
         );
 
-        // Encerrar todas as sessões do usuário
+        if (resultado.getMatchedCount() == 0) {
+            throw new IllegalArgumentException(
+                "A senha foi modificada. Tente novamente."
+            );
+        }
+
+        // ENCERRAR SESSÕES
+
         sessaoService.encerrarSessoesDoUsuario(
-            idUsuario
+            usuarioId
         );
 
-        // Retornar a confirmação da alteração
+        // RETORNAR CONFIRMAÇÃO
+
         return new Document(
             "mensagem",
             "Senha alterada com sucesso! Faça login novamente."
         );
     }
 
-    // Preparar os dados públicos do usuário
+    // DADOS PÚBLICOS DO USUÁRIO
+
     private static Document dadosPublicos(
         Document usuario
     ) {
@@ -237,6 +309,10 @@ public class PerfilUsuarioService {
             .append(
                 "celular",
                 usuario.getString("celular")
+            )
+            .append(
+                "cargo",
+                usuario.getString("cargo")
             );
     }
 }
