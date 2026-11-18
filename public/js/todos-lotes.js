@@ -27,25 +27,35 @@ document.addEventListener("DOMContentLoaded", () => {
         return sessionStorage.getItem("token");
     }
 
-    // Limpa os dados locais e volta para o login
+    // LIMPAR SESSÃO
+
     function encerrarAcesso() {
+
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("usuario");
+
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // Envia o token para o backend
+    // REQUISIÇÕES AUTENTICADAS
+
     async function requisicaoAutenticada(url, opcoes = {}) {
 
         const token = obterToken();
 
         if (!token || !token.trim()) {
+
             encerrarAcesso();
+
             throw new Error("Sessão não encontrada.");
         }
 
         const headers = new Headers(opcoes.headers || {});
-        headers.set("Authorization", `Bearer ${token}`);
+
+        headers.set(
+            "Authorization",
+            `Bearer ${token}`
+        );
 
         const resposta = await fetch(url, {
             ...opcoes,
@@ -54,12 +64,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (resposta.status === 401) {
+
             encerrarAcesso();
-            throw new Error("Sua sessão expirou. Faça login novamente.");
+
+            throw new Error(
+                "Sua sessão expirou. Faça login novamente."
+            );
         }
 
         if (resposta.status === 403) {
-            throw new Error("Você não tem permissão para esta operação.");
+
+            throw new Error(
+                "Você não tem permissão para esta operação."
+            );
         }
 
         return resposta;
@@ -75,9 +92,11 @@ document.addEventListener("DOMContentLoaded", () => {
             stroke="currentColor"
             stroke-width="1.8"
             aria-hidden="true">
+
             <path stroke-linecap="round"
                 stroke-linejoin="round"
                 d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.757.426 1.757 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.757-2.924 1.757-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.757-.426-1.757-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065Z"/>
+
             <path stroke-linecap="round"
                 stroke-linejoin="round"
                 d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
@@ -94,6 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
             stroke="currentColor"
             stroke-width="1.8"
             aria-hidden="true">
+
             <path stroke-linecap="round"
                 stroke-linejoin="round"
                 d="M3 6h18m-2 0-1 14H6L5 6m3 0V4h8v2M10 10v7m4-7v7"/>
@@ -105,9 +125,11 @@ document.addEventListener("DOMContentLoaded", () => {
     async function lerResposta(resposta) {
 
         const texto = await resposta.text();
+
         let dados = {};
 
         if (texto) {
+
             try {
                 dados = JSON.parse(texto);
             } catch {
@@ -116,8 +138,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!resposta.ok) {
+
             throw new Error(
-                dados.mensagem || `Erro HTTP ${resposta.status}`
+                dados.mensagem ||
+                `Erro HTTP ${resposta.status}`
             );
         }
 
@@ -127,12 +151,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // MENSAGENS DE ERRO
 
     function mostrarErro(texto) {
+
         mensagemErro.textContent = texto;
+
         mensagemErro.classList.remove("hidden");
     }
 
     function limparErro() {
+
         mensagemErro.textContent = "";
+
         mensagemErro.classList.add("hidden");
     }
 
@@ -142,12 +170,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const numero = Number(valor);
 
-        return valor != null && valor !== "" &&
+        return valor != null &&
+            valor !== "" &&
             Number.isFinite(numero)
+
             ? numero.toLocaleString("pt-BR", {
                 style: "currency",
                 currency: "BRL"
             })
+
             : "-";
     }
 
@@ -157,11 +188,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const numero = Number(valor);
 
-        return valor != null && valor !== "" &&
+        return valor != null &&
+            valor !== "" &&
             Number.isFinite(numero)
+
             ? numero.toLocaleString("pt-BR", {
                 maximumFractionDigits: 3
             })
+
             : "-";
     }
 
@@ -186,12 +220,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function calcularStatus(lote) {
 
-        // Prioriza lotes inativos
+        // LOTE INATIVO
+
         if (lote.inativo === true) {
             return "Inativo";
         }
 
-        const quantidade = Number(lote.quantidadeDisponivel);
+        const quantidade = Number(
+            lote.quantidadeDisponivel
+        );
+
+        // LOTE ESGOTADO
 
         if (quantidade <= 0) {
             return "Esgotado";
@@ -213,6 +252,8 @@ document.addEventListener("DOMContentLoaded", () => {
             String(hoje.getDate()).padStart(2, "0")
         ].join("-");
 
+        // LOTE VENCIDO
+
         if (validade < dataHoje) {
             return "Vencido";
         }
@@ -224,6 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ) / 86400000
         );
 
+        // LOTE PRÓXIMO DO VENCIMENTO
+
         if (dias <= 30) {
             return "Próx. do vencimento";
         }
@@ -232,6 +275,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // CRIAR CÉLULAS
+
+    // MESMA FONTE DO HISTÓRICO
 
     function criarCelula(texto, classes = "") {
 
@@ -260,6 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-primary-dark hover:bg-primary-light";
 
         botao.innerHTML = icone;
+
         botao.addEventListener("click", acao);
 
         return botao;
@@ -274,6 +320,7 @@ document.addEventListener("DOMContentLoaded", () => {
         modalConfirmar.textContent = nomeBotao;
 
         modalConfirmar.disabled = false;
+
         acaoModal = acao;
 
         modal.classList.remove("hidden");
@@ -295,16 +342,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // EVENTOS DO MODAL
 
     modalCancelar.addEventListener("click", () => {
-        if (!processando) fecharModal();
+
+        if (!processando) {
+            fecharModal();
+        }
     });
 
     modal.addEventListener("click", (evento) => {
-        if (evento.target === modal && !processando) {
+
+        if (
+            evento.target === modal &&
+            !processando
+        ) {
             fecharModal();
         }
     });
 
     document.addEventListener("keydown", (evento) => {
+
         if (
             evento.key === "Escape" &&
             !modal.classList.contains("hidden") &&
@@ -323,6 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
         processando = true;
 
         const acao = acaoModal;
+
         modalConfirmar.disabled = true;
         modalCancelar.disabled = true;
 
@@ -331,18 +387,25 @@ document.addEventListener("DOMContentLoaded", () => {
             const mensagem = await acao();
 
             fecharModal();
+
+            // ATUALIZAR TABELA
             await carregarLotes();
 
             alert(mensagem);
 
         } catch (erro) {
 
-            console.error("Erro na operação do lote:", erro);
+            console.error(
+                "Erro na operação do lote:",
+                erro
+            );
+
             mostrarErro(erro.message);
 
         } finally {
 
             processando = false;
+
             modalConfirmar.disabled = false;
             modalCancelar.disabled = false;
         }
@@ -350,7 +413,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // VERIFICAR EXCLUSÃO
 
-    // Consulta se o lote pode ser excluído
     async function verificarExclusao(id) {
 
         limparErro();
@@ -364,6 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const dados = await lerResposta(resposta);
 
             // LOTE SEM MOVIMENTAÇÕES
+
             if (dados.podeExcluir === true) {
 
                 abrirModal(
@@ -377,7 +440,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                         const resposta = await requisicaoAutenticada(
                             `${API}/lotes/${encodeURIComponent(id)}`,
-                            { method: "DELETE" }
+                            {
+                                method: "DELETE"
+                            }
                         );
 
                         const resultado = await lerResposta(resposta);
@@ -390,6 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
 
                 // LOTE COM MOVIMENTAÇÕES
+
                 abrirModal(
                     "Não é possível excluir o lote",
 
@@ -404,9 +470,11 @@ document.addEventListener("DOMContentLoaded", () => {
                             `${API}/lotes/${encodeURIComponent(id)}/status`,
                             {
                                 method: "PATCH",
+
                                 headers: {
                                     "Content-Type": "application/json"
                                 },
+
                                 body: JSON.stringify({
                                     inativo: true
                                 })
@@ -437,77 +505,124 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const linha = document.createElement("tr");
 
+        // MESMA COR E BORDAS DO HISTÓRICO
+
         linha.className =
-            "border-b border-gray-300 bg-[#e9ebee]";
+            "border-b border-gray-300 bg-[#e9ebee] text-text";
+
+        // CÓDIGO DO LOTE
 
         linha.appendChild(
-            criarCelula(lote.codigo || "-", "rounded-l-md")
+            criarCelula(lote.codigo || "-")
         );
 
-        linha.appendChild(
-            criarCelula(lote.produto || "Produto não encontrado")
-        );
+        // PRODUTO
 
         linha.appendChild(
-            criarCelula(formatarQuantidade(lote.quantidadeInicial))
+            criarCelula(
+                lote.produto || "Produto não encontrado"
+            )
         );
 
-        linha.appendChild(
-            criarCelula(formatarQuantidade(lote.quantidadeDisponivel))
-        );
+        // QUANTIDADE INICIAL
 
         linha.appendChild(
-            criarCelula(formatarMoeda(lote.custoTotalAquisicao))
+            criarCelula(
+                formatarQuantidade(lote.quantidadeInicial)
+            )
         );
 
-        linha.appendChild(
-            criarCelula(formatarData(lote.dataEntrada))
-        );
+        // QUANTIDADE DISPONÍVEL
 
         linha.appendChild(
-            criarCelula(formatarData(lote.dataValidade))
+            criarCelula(
+                formatarQuantidade(lote.quantidadeDisponivel)
+            )
         );
 
+        // CUSTO DE AQUISIÇÃO
+
         linha.appendChild(
-            criarCelula(calcularStatus(lote), "text-center")
+            criarCelula(
+                formatarMoeda(lote.custoTotalAquisicao)
+            )
+        );
+
+        // DATA DE ENTRADA
+
+        linha.appendChild(
+            criarCelula(
+                formatarData(lote.dataEntrada)
+            )
+        );
+
+        // DATA DE VALIDADE
+
+        linha.appendChild(
+            criarCelula(
+                formatarData(lote.dataValidade)
+            )
+        );
+
+        // STATUS DO LOTE
+
+        linha.appendChild(
+            criarCelula(
+                calcularStatus(lote),
+                "text-center"
+            )
         );
 
         // BOTÕES DE AÇÃO
 
         const celula = document.createElement("td");
-        celula.className = "rounded-r-md px-3 py-3";
+
+        // REMOVE ARREDONDAMENTO LATERAL
+        celula.className = "px-3 py-3";
 
         const grupo = document.createElement("div");
+
         grupo.className =
             "flex items-center justify-center gap-3";
 
         // BOTÃO EDITAR
+
         const editar = criarBotao(
             "Editar lote",
             engrenagem,
             () => {
+
                 window.location.href =
                     `cadastro-lotes.html?id=${encodeURIComponent(id)}`;
             }
         );
 
         // BOTÃO EXCLUIR
+
         const excluir = criarBotao(
             "Excluir lote",
             lixeira,
             () => verificarExclusao(id)
         );
 
+        // DESATIVAR BOTÕES SEM ID
+
         if (!id) {
+
             editar.disabled = true;
             excluir.disabled = true;
 
-            editar.title = "ID do lote não encontrado";
-            excluir.title = "ID do lote não encontrado";
+            editar.title =
+                "ID do lote não encontrado";
+
+            excluir.title =
+                "ID do lote não encontrado";
         }
 
         grupo.append(editar, excluir);
+
         celula.appendChild(grupo);
+
         linha.appendChild(celula);
 
         return linha;
@@ -520,27 +635,32 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.replaceChildren();
 
         const linha = document.createElement("tr");
+
         const celula = document.createElement("td");
 
         celula.colSpan = 9;
+
         celula.className =
             "px-3 py-6 text-center text-text-secondary";
 
         celula.textContent = texto;
 
         linha.appendChild(celula);
+
         tabela.appendChild(linha);
     }
 
     // CARREGAR LOTES
 
-    // Busca somente lotes da conta autenticada
     async function carregarLotes() {
 
         limparErro();
+
         mostrarMensagem("Carregando lotes...");
 
         try {
+
+            // CONSULTA OS LOTES DA CONTA AUTENTICADA
 
             const resposta = await requisicaoAutenticada(
                 `${API}/lotes`
@@ -549,26 +669,45 @@ document.addEventListener("DOMContentLoaded", () => {
             const dados = await lerResposta(resposta);
 
             if (!Array.isArray(dados.lotes)) {
-                throw new Error("Resposta inválida do servidor.");
+
+                throw new Error(
+                    "Resposta inválida do servidor."
+                );
             }
 
             tabela.replaceChildren();
 
-            // Nenhum lote cadastrado na conta
+            // NENHUM LOTE CADASTRADO
+
             if (dados.lotes.length === 0) {
-                mostrarMensagem("Nenhum lote cadastrado.");
+
+                mostrarMensagem(
+                    "Nenhum lote cadastrado."
+                );
+
                 return;
             }
 
+            // PREENCHER TABELA
+
             dados.lotes.forEach((lote) => {
-                tabela.appendChild(criarLinha(lote));
+
+                tabela.appendChild(
+                    criarLinha(lote)
+                );
             });
 
         } catch (erro) {
 
-            console.error("Erro ao carregar lotes:", erro);
+            console.error(
+                "Erro ao carregar lotes:",
+                erro
+            );
 
-            mostrarMensagem("Não foi possível carregar os lotes.");
+            mostrarMensagem(
+                "Não foi possível carregar os lotes."
+            );
+
             mostrarErro(erro.message);
         }
     }
@@ -576,9 +715,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // INICIALIZAR TELA
 
     if (!obterToken()) {
+
         encerrarAcesso();
+
         return;
     }
 
     carregarLotes();
+
 });
