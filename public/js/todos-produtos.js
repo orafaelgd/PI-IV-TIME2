@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // CONFIGURAÇÕES
 
     const API = "http://localhost:8080/api";
-
-    // Página de login
     const PAGINA_LOGIN = "login-usuario.html";
 
     // ELEMENTOS DA TELA
@@ -36,12 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // VERIFICAÇÃO DE SESSÃO
 
-    // Recupera o token salvo após o login
     function obterToken() {
         return sessionStorage.getItem("token");
     }
 
-    // Remove os dados da sessão e retorna ao login
     function encerrarAcesso() {
 
         sessionStorage.removeItem("token");
@@ -50,7 +46,6 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // Verifica se existe um token no navegador
     function verificarSessao() {
 
         const token = obterToken();
@@ -65,7 +60,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // REQUISIÇÕES AUTENTICADAS
 
-    // Envia o token para validação no backend
     async function requisicaoAutenticada(url, opcoes = {}) {
 
         const token = obterToken();
@@ -75,7 +69,6 @@ document.addEventListener("DOMContentLoaded", () => {
             throw new Error("Sessão não encontrada.");
         }
 
-        // Adiciona o token ao cabeçalho
         const headers = new Headers(opcoes.headers || {});
 
         headers.set(
@@ -89,7 +82,6 @@ document.addEventListener("DOMContentLoaded", () => {
             cache: "no-store"
         });
 
-        // Sessão inválida ou expirada
         if (resposta.status === 401) {
 
             encerrarAcesso();
@@ -99,7 +91,6 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         }
 
-        // Usuário sem permissão
         if (resposta.status === 403) {
 
             throw new Error(
@@ -148,7 +139,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // MENSAGENS DE ERRO
 
-    // Exibe erros na tela
     function mostrarErro(texto) {
 
         mensagemErro.textContent = texto;
@@ -157,7 +147,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // LEITURA DAS RESPOSTAS
 
-    // Converte as respostas do backend para JSON
     async function lerResposta(resposta) {
 
         const texto = await resposta.text();
@@ -187,7 +176,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // IDENTIFICAR PRODUTO
 
-    // Recupera o ID do produto no MongoDB
     function obterId(produto) {
 
         const id =
@@ -208,7 +196,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // FORMATAR TEXTOS
 
-    // Converte os valores para texto
     function valorTexto(valor, alternativa = "-") {
 
         if (
@@ -231,7 +218,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // FORMATAR DATA
 
-    // Converte a validade para o formato brasileiro
     function formatarData(valor) {
 
         if (!valor) return "-";
@@ -257,7 +243,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // FORMATAR PREÇO
 
-    // Converte o preço para reais
     function formatarPreco(valor) {
 
         if (
@@ -284,12 +269,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // CRIAR CÉLULAS DA TABELA
 
-    // Adiciona uma célula com o texto informado
+    // PADRONIZADO COM A TABELA DE HISTÓRICO
+
     function criarCelula(linha, texto, classeExtra = "") {
 
         const celula = document.createElement("td");
 
-        celula.className = `px-3 py-3 ${classeExtra}`;
+        celula.className =
+            `px-3 py-3 font-semibold ${classeExtra}`;
 
         celula.textContent = texto;
 
@@ -300,7 +287,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // FECHAR MODAL
 
-    // Fecha a janela de confirmação
     function fecharModal() {
 
         modal.classList.add("hidden");
@@ -311,13 +297,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ABRIR MODAL
 
-    // Abre a janela de confirmação
     function abrirModal(titulo, texto, botao, acao) {
 
         modalTitulo.textContent = titulo;
-
         modalTexto.textContent = texto;
-
         modalConfirmar.textContent = botao;
 
         modalConfirmar.disabled = false;
@@ -332,13 +315,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // EVENTOS DO MODAL
 
-    // Fecha ao clicar no botão cancelar
     modalCancelar.addEventListener(
         "click",
         fecharModal
     );
 
-    // Fecha ao clicar fora da janela
     modal.addEventListener("click", (evento) => {
 
         if (evento.target === modal) {
@@ -346,7 +327,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Fecha ao pressionar Escape
     document.addEventListener("keydown", (evento) => {
 
         if (
@@ -359,7 +339,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // CONFIRMAR AÇÃO
 
-    // Executa a operação após a confirmação
     modalConfirmar.addEventListener("click", async () => {
 
         if (!acaoModal) return;
@@ -374,7 +353,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             fecharModal();
 
-            // Atualiza a lista após a operação
+            // Atualiza a tabela após a operação
             await carregarProdutos();
 
         } catch (erro) {
@@ -391,14 +370,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // VERIFICAR EXCLUSÃO
 
-    // Consulta se o produto pode ser excluído
     async function conferirExclusao(id) {
 
         mensagemErro.classList.add("hidden");
 
         try {
 
-            // Envia o token para verificar a exclusão
             const resposta = await requisicaoAutenticada(
                 `${API}/produtos/${encodeURIComponent(id)}/exclusao`
             );
@@ -418,7 +395,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     async () => {
 
-                        // Exclui o produto da conta autenticada
                         const resposta = await requisicaoAutenticada(
                             `${API}/produtos/${encodeURIComponent(id)}`,
                             {
@@ -439,7 +415,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // PRODUTO COM LOTES OU MOVIMENTAÇÕES
 
-                // Oferece a opção de tornar o produto inativo
                 abrirModal(
                     "Não é possível excluir o produto",
 
@@ -450,7 +425,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     async () => {
 
-                        // Altera o status do produto
                         const resposta = await requisicaoAutenticada(
                             `${API}/produtos/${encodeURIComponent(id)}/status`,
                             {
@@ -486,7 +460,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // CRIAR BOTÕES
 
-    // Cria os botões com os ícones originais
     function criarBotao(acao, titulo, icone) {
 
         const botao = document.createElement("button");
@@ -508,7 +481,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // CARREGAR PRODUTOS
 
-    // Busca somente produtos da conta autenticada
     async function carregarProdutos() {
 
         mensagemErro.classList.add("hidden");
@@ -526,7 +498,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
 
-            // Envia o token para identificar a conta
+            // CONSULTAR PRODUTOS DO USUÁRIO AUTENTICADO
+
             const resposta = await requisicaoAutenticada(
                 `${API}/produtos`
             );
@@ -546,9 +519,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             tabela.replaceChildren();
 
-            // LISTA VAZIA
+            // NENHUM PRODUTO CADASTRADO
 
-            // Exibe uma mensagem quando não existem produtos
             if (produtos.length === 0) {
 
                 const linha = document.createElement("tr");
@@ -566,17 +538,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            // MONTAR LISTAGEM
+            // MONTAR TABELA
 
-            // Cria uma linha para cada produto retornado
             produtos.forEach((produto) => {
 
                 const id = obterId(produto);
 
                 const linha = document.createElement("tr");
 
+                // FUNDO IGUAL AO HISTÓRICO
                 linha.className =
-                    "border-b border-gray-300 bg-[#e9ebee]";
+                    "border-b border-gray-300 bg-[#e9ebee] text-text";
 
                 // NOME DO PRODUTO
 
@@ -688,7 +660,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     iconeLixeira
                 );
 
-                // Desativa os botões quando o ID não existe
+                // DESATIVAR BOTÕES SEM ID
+
                 if (!id) {
 
                     editar.disabled = true;
@@ -722,12 +695,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // INICIALIZAR TELA
 
-    // Impede carregar produtos quando não existe token
     if (!verificarSessao()) {
         return;
     }
 
-    // Carrega os produtos da conta autenticada
     carregarProdutos();
 
 });
