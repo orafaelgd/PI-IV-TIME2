@@ -3,289 +3,314 @@
 <html lang="pt-BR">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
 
-  <title>Registrar Saída | Sistema de Gestão e Redução de Desperdício</title>
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
 
-  <link rel="stylesheet" href="/public/css/style.css">
+    <title>Registrar Saída | Sistema de Gestão e Redução de Desperdício</title>
+
+    <!-- ESTILIZAÇÃO PADRONIZADA -->
+    <link rel="stylesheet"
+        href="../../public/css/style.css">
+
+    <style>
+        /* SETINHAS PADRONIZADAS DOS SELECTS */
+
+        #produto,
+        #lote,
+        #motivo {
+
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+
+            padding-right: 36px;
+
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23243547' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+            background-repeat: no-repeat;
+            background-position: right 11px center;
+            background-size: 14px 14px;
+        }
+
+        /* CAMPOS DESABILITADOS */
+
+        #form-registrar-saida :disabled {
+
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+    </style>
 </head>
 
 <body class="flex min-h-screen bg-background">
 
-  <aside
-    id="aside-placeholder"
-    class="w-[180px] shrink-0"
-  ></aside>
+    <!-- MENU LATERAL -->
+    <aside id="aside-placeholder"
+        class="w-[180px] shrink-0"></aside>
 
-  <div class="flex min-w-0 flex-1 flex-col">
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="flex min-w-0 flex-1 flex-col">
 
-    <div id="header-placeholder"></div>
+        <!-- CABEÇALHO -->
+        <div id="header-placeholder"></div>
 
-    <main class="flex-1">
+        <main class="flex-1">
 
-      <div class="w-full px-6 pt-8">
+            <div class="w-full px-6 pt-8">
 
-        <!-- Breadcrumb -->
-        <div
-          class="mb-8 flex min-h-[35px] items-center text-base"
-        >
-          <span class="text-text-secondary">
-            Saídas
-          </span>
+                <!-- CAMINHO DA PÁGINA -->
+                <div class="mb-8 flex min-h-[35px] items-center text-base">
 
-          <span class="ml-1 font-semibold text-text">
-            / Registrar
-          </span>
-        </div>
+                    <span class="text-text-secondary">
+                        Saídas
+                    </span>
 
-        <!-- Card -->
-        <section
-          class="w-full rounded-md bg-gray-200 px-6 py-5"
-        >
+                    <span class="ml-1 font-semibold text-text">
+                        / Registrar Saída
+                    </span>
+                </div>
 
-          <h1
-            class="mb-9 text-base font-semibold text-text"
-          >
-            Registrar Saída
-          </h1>
+                <!-- CARD DE REGISTRO -->
+                <section
+                    class="w-full rounded-md bg-white px-6 py-5">
 
-          <form id="form-registrar-saida">
+                    <!-- TÍTULO -->
+                    <h1
+                        class="mb-9 text-base font-semibold text-text">
 
-            <!-- Produto e lote -->
-            <div
-              class="grid grid-cols-1 gap-8 md:grid-cols-2"
-            >
+                        Registrar saída
+                    </h1>
 
-              <!-- Produto -->
-              <div class="flex flex-col">
+                    <!-- FORMULÁRIO -->
+                    <form
+                        id="form-registrar-saida"
+                        class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
 
-                <label
-                  for="produto"
-                  class="mb-2 whitespace-nowrap text-xs font-medium text-text"
-                >
-                  Produto
-                  <span class="text-red-600">*</span>
-                </label>
+                        <!-- PRODUTO -->
+                        <div class="flex flex-col">
 
-                <select
-                  id="produto"
-                  name="produto"
-                  required
-                  class="h-[28px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[11px] text-text outline-none"
-                >
-                  <option value="" selected disabled>
-                    Selecione um produto cadastrado
-                  </option>
+                            <label
+                                for="produto"
+                                class="mb-2 text-xs font-medium text-text">
 
-                  <!-- Produtos carregados do banco de dados -->
-                </select>
+                                Produto
+                                <span class="text-red-600">*</span>
+                            </label>
 
-              </div>
+                            <select
+                                id="produto"
+                                name="produto"
+                                required
+                                disabled
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
 
-              <!-- Lote -->
-              <div class="flex flex-col">
+                                <option value="">
+                                    Carregando produtos...
+                                </option>
 
-                <label
-                  for="lote"
-                  class="mb-2 whitespace-nowrap text-xs font-medium text-text"
-                >
-                  Lote
-                  <span class="text-red-600">*</span>
-                </label>
+                            </select>
+                        </div>
 
-                <select
-                  id="lote"
-                  name="lote"
-                  required
-                  class="h-[28px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[11px] text-text outline-none"
-                >
-                  <option value="" selected disabled>
-                    Selecione um lote disponível
-                  </option>
+                        <!-- LOTE -->
+                        <div class="flex flex-col">
 
-                  <!-- Lotes do produto selecionado carregados do banco -->
-                </select>
+                            <label
+                                for="lote"
+                                class="mb-2 text-xs font-medium text-text">
 
-              </div>
+                                Lote
+                                <span class="text-red-600">*</span>
+                            </label>
 
+                            <select
+                                id="lote"
+                                name="lote"
+                                required
+                                disabled
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+
+                                <option value="">
+                                    Selecione um produto primeiro
+                                </option>
+
+                            </select>
+                        </div>
+
+                        <!-- QUANTIDADE DISPONÍVEL -->
+                        <div class="flex flex-col">
+
+                            <label
+                                for="quantidade-disponivel"
+                                class="mb-2 text-xs font-medium text-text">
+
+                                Qtd. disponível
+                                <span class="text-red-600">*</span>
+                            </label>
+
+                            <input
+                                id="quantidade-disponivel"
+                                name="quantidade-disponivel"
+                                type="text"
+                                placeholder="Selecione um lote"
+                                readonly
+                                required
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+                        </div>
+
+                        <!-- QUANTIDADE DE SAÍDA -->
+                        <div class="flex flex-col">
+
+                            <label
+                                for="quantidade-saida"
+                                class="mb-2 text-xs font-medium text-text">
+
+                                Qtd. de saída
+                                <span class="text-red-600">*</span>
+                            </label>
+
+                            <input
+                                id="quantidade-saida"
+                                name="quantidade-saida"
+                                type="text"
+                                inputmode="decimal"
+                                placeholder="Ex.: 5 ou 2,5"
+                                maxlength="40"
+                                autocomplete="off"
+                                required
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+                        </div>
+
+                        <!-- DATA DA SAÍDA -->
+                        <div class="flex flex-col">
+
+                            <label
+                                for="data-saida"
+                                class="mb-2 text-xs font-medium text-text">
+
+                                Data da saída
+                                <span class="text-red-600">*</span>
+                            </label>
+
+                            <input
+                                id="data-saida"
+                                name="data-saida"
+                                type="date"
+                                required
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+                        </div>
+
+                        <!-- MOTIVO -->
+                        <div class="flex flex-col">
+
+                            <label
+                                for="motivo"
+                                class="mb-2 text-xs font-medium text-text">
+
+                                Motivo
+                                <span class="text-red-600">*</span>
+                            </label>
+
+                            <select
+                                id="motivo"
+                                name="motivo"
+                                required
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+
+                                <option value="">
+                                    Selecione
+                                </option>
+
+                                <option value="consumido">
+                                    Consumido
+                                </option>
+
+                                <option value="vencimento">
+                                    Vencimento
+                                </option>
+
+                                <option value="contaminado">
+                                    Contaminado
+                                </option>
+
+                                <option value="danificado">
+                                    Danificado
+                                </option>
+
+                                <option value="outro">
+                                    Outro
+                                </option>
+
+                            </select>
+                        </div>
+
+                        <!-- OBSERVAÇÃO -->
+                        <div class="mt-4 flex flex-col md:col-span-2">
+
+                            <label
+                                for="observacao"
+                                class="mb-2 text-xs font-medium text-text">
+
+                                Observação
+                                <span class="text-red-600">*</span>
+                            </label>
+
+                            <textarea
+                                id="observacao"
+                                name="observacao"
+                                placeholder="Informe detalhes sobre a saída"
+                                required
+                                maxlength="1000"
+                                class="min-h-[70px] w-full resize-y rounded border border-gray-400 bg-[#e9ebee] px-3 py-2 text-[11px] text-text outline-none"></textarea>
+                        </div>
+
+                        <!-- MENSAGEM DO FORMULÁRIO -->
+                        <p
+                            id="mensagemFormulario"
+                            class="hidden text-xs text-red-600 md:col-span-2"
+                            role="alert"
+                            aria-live="polite">
+                        </p>
+
+                        <!-- BOTÕES -->
+                        <div class="mt-7 flex justify-end gap-3 md:col-span-2">
+
+                            <!-- CANCELAR -->
+                            <button
+                                id="botaoCancelar"
+                                type="button"
+                                class="flex h-[28px] w-[92px] cursor-pointer items-center justify-center rounded bg-primary-dark text-[10px] font-semibold text-white">
+
+                                Cancelar
+                            </button>
+
+                            <!-- REGISTRAR SAÍDA -->
+                            <button
+                                id="botaoRegistrar"
+                                type="submit"
+                                disabled
+                                class="flex h-[28px] w-[150px] cursor-pointer items-center justify-center rounded bg-gray-200 text-[10px] font-medium text-text disabled:opacity-50">
+
+                                Registrar saída
+                            </button>
+                        </div>
+
+                    </form>
+
+                </section>
             </div>
+        </main>
 
-            <!-- Quantidades e data da saída -->
-            <div class="mt-6 grid grid-cols-1 gap-8 md:grid-cols-3">
+        <!-- RODAPÉ -->
+        <div id="footer-placeholder"></div>
+    </div>
 
-              <!-- Quantidade disponível -->
-              <div class="flex flex-col">
+    <!-- COMPONENTES COMPARTILHADOS -->
+    <script src="../../public/js/load-partials.js"></script>
 
-                <label
-                  for="quantidade-disponivel"
-                  class="mb-2 whitespace-nowrap text-xs font-medium text-text"
-                >
-                  Qtd. disponível
-                  <span class="text-red-600">*</span>
-                </label>
-
-                <input
-                  id="quantidade-disponivel"
-                  name="quantidade-disponivel"
-                  type="text"
-                  placeholder="Selecione um lote"
-                  readonly
-                  required
-                  class="h-[28px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[10px] text-text outline-none"
-                >
-
-              </div>
-
-              <!-- Quantidade de saída -->
-              <div class="flex flex-col">
-
-                <label
-                  for="quantidade-saida"
-                  class="mb-2 whitespace-nowrap text-xs font-medium text-text"
-                >
-                  Qtd. de saída
-                  <span class="text-red-600">*</span>
-                </label>
-
-                <input
-                  id="quantidade-saida"
-                  name="quantidade-saida"
-                  type="text"
-                  placeholder="Ex.: 5"
-                  required
-                  class="h-[28px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[10px] text-text outline-none"
-                >
-
-              </div>
-
-              <!-- Data da saída -->
-              <div class="flex flex-col">
-
-                <label
-                  for="data-saida"
-                  class="mb-2 whitespace-nowrap text-xs font-medium text-text"
-                >
-                  Data da saída
-                  <span class="text-red-600">*</span>
-                </label>
-
-                <input
-                  id="data-saida"
-                  name="data-saida"
-                  type="date"
-                  required
-                  class="h-[28px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[10px] text-text outline-none"
-                >
-
-              </div>
-
-            </div>
-
-            <!-- Motivo -->
-            <div class="mt-5 w-[31%]">
-
-              <label
-                for="motivo"
-                class="mb-2 block text-xs font-medium text-text"
-              >
-                Motivo
-                <span class="text-red-600">*</span>
-              </label>
-
-              <select
-                id="motivo"
-                name="motivo"
-                required
-                class="h-[52px] w-full rounded border border-gray-400 bg-primary-light px-3 text-[10px] text-text outline-none"
-              >
-                <option value="" selected disabled>
-                  Selecione
-                </option>
-
-                <option value="consumido">
-                  Consumido
-                </option>
-
-                <option value="vencimento">
-                  Vencimento
-                </option>
-
-                <option value="contaminado">
-                  Contaminado
-                </option>
-
-                <option value="danificado">
-                  Danificado
-                </option>
-
-                <option value="outro">
-                  Outro
-                </option>
-              </select>
-
-            </div>
-
-            <!-- Observação -->
-            <div class="mt-6">
-
-              <label
-                for="observacao"
-                class="mb-2 block text-xs font-medium text-text"
-              >
-                Observação
-                <span class="text-red-600">*</span>
-              </label>
-
-              <textarea
-                id="observacao"
-                name="observacao"
-                placeholder="Digite aqui"
-                required
-                class="h-[84px] w-full resize-none rounded border border-gray-400 bg-primary-light px-3 py-2 text-[10px] text-text outline-none"
-              ></textarea>
-
-            </div>
-
-            <!-- Botões -->
-            <div
-              class="mt-7 flex justify-end gap-3"
-            >
-
-              <button
-                type="button"
-                class="flex h-[28px] w-[92px] cursor-pointer items-center justify-center rounded bg-primary-dark text-[10px] font-semibold text-white"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="submit"
-                class="flex h-[28px] w-[108px] cursor-pointer items-center justify-center rounded bg-gray-200 text-[9px] font-medium text-text"
-              >
-                Registrar Saída
-              </button>
-
-            </div>
-
-          </form>
-
-        </section>
-
-      </div>
-
-    </main>
-
-    <div id="footer-placeholder"></div>
-
-  </div>
-
-  <!-- Componentes compartilhados -->
-  <script src="/public/js/load-partials.js"></script>
-
-  <!-- Integração da Tela 7 com o backend -->
-  <script src="/public/js/registrar-saida.js"></script>
+    <!-- REGISTRO DE SAÍDA -->
+    <script src="../../public/js/registrar-saida.js"></script>
 
 </body>
-
 </html>

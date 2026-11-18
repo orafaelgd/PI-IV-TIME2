@@ -35,6 +35,8 @@ public class MovimentacoesService {
     private static final ZoneId FUSO =
         ZoneId.of("America/Sao_Paulo");
 
+    // MOTIVOS PERMITIDOS
+
     private static final Set<String> MOTIVOS = Set.of(
         "consumido",
         "vencimento",
@@ -70,8 +72,6 @@ public class MovimentacoesService {
 
     // CLASSE DE RESULTADO
 
-    // Permite retornar ao Controller um status HTTP
-    // e uma mensagem sem depender de HttpExchange
     public static class Resultado {
 
         private final int status;
@@ -102,7 +102,7 @@ public class MovimentacoesService {
         ObjectId usuarioId
     ) {
 
-        // VALIDAR USUÁRIO
+        // VALIDAR USUÁRIO AUTENTICADO
 
         if (usuarioId == null) {
 
@@ -239,7 +239,9 @@ public class MovimentacoesService {
 
         // VALIDAR CHAVE DE IDEMPOTÊNCIA
 
-        // A mesma operação deve utilizar a mesma chave
+        // A MESMA OPERAÇÃO DEVE REUTILIZAR
+        // A MESMA CHAVE EM CASO DE REENVIO
+
         String chave;
 
         try {
@@ -315,8 +317,6 @@ public class MovimentacoesService {
 
         // GERAR ASSINATURA DA OPERAÇÃO
 
-        // A assinatura identifica os dados da saída,
-        // inclusive a conta autenticada.
         String assinatura = gerarAssinatura(
             itemId,
             loteId,
@@ -363,8 +363,9 @@ public class MovimentacoesService {
 
         // INICIAR TRANSAÇÃO
 
-        // A baixa no estoque e o histórico precisam
-        // ser gravados na mesma transação.
+        // A BAIXA NO ESTOQUE E O HISTÓRICO
+        // DEVEM SER CONFIRMADOS JUNTOS
+
         try (
             ClientSession sessao =
                 cliente.startSession()
@@ -376,8 +377,6 @@ public class MovimentacoesService {
 
                 // VERIFICAR PRODUTO DA CONTA
 
-                // O produto precisa existir e pertencer
-                // ao usuário identificado pelo token.
                 Document produto = produtos.find(
                     sessao,
                     Filters.and(
@@ -388,6 +387,10 @@ public class MovimentacoesService {
                         Filters.eq(
                             "usuarioId",
                             usuarioId
+                        ),
+                        Filters.eq(
+                            "status",
+                            "ativo"
                         )
                     )
                 ).first();
@@ -398,17 +401,17 @@ public class MovimentacoesService {
 
                     return new Resultado(
                         409,
-                        "Produto inexistente ou não pertence à sua conta."
+                        "Produto inexistente, inativo ou não pertence à sua conta."
                     );
                 }
 
-                // ATUALIZAR ESTOQUE DO LOTE
+                // VERIFICAR LOTE DA CONTA
 
-                // Verifica:
-                // 1. ID do lote
-                // 2. ID do produto
-                // 3. ID do usuário
-                // 4. Saldo disponível
+                // CONFIRMAR QUE O LOTE:
+                // PERTENCE AO PRODUTO E AO USUÁRIO
+                // NÃO ESTÁ INATIVO OU ARQUIVADO
+                // POSSUI SALDO SUFICIENTE
+
                 UpdateResult atualizacao =
                     lotes.updateOne(
                         sessao,
@@ -425,6 +428,14 @@ public class MovimentacoesService {
                                 "usuarioId",
                                 usuarioId
                             ),
+                            Filters.ne(
+                                "inativo",
+                                true
+                            ),
+                            Filters.ne(
+                                "arquivado",
+                                true
+                            ),
                             Filters.gte(
                                 "quantidadeDisponivel",
                                 quantidadeDecimal
@@ -436,7 +447,7 @@ public class MovimentacoesService {
                         )
                     );
 
-                // LOTE INVÁLIDO OU SEM ESTOQUE
+                // VERIFICAR RESULTADO DA ATUALIZAÇÃO
 
                 if (
                     atualizacao.getModifiedCount() != 1
@@ -446,7 +457,7 @@ public class MovimentacoesService {
 
                     return new Resultado(
                         409,
-                        "Lote inexistente, não autorizado ou com saldo insuficiente."
+                        "Lote inexistente, inativo, não autorizado ou com saldo insuficiente."
                     );
                 }
 
@@ -503,7 +514,7 @@ public class MovimentacoesService {
                             assinatura
                         );
 
-                // INSERIR HISTÓRICO
+                // REGISTRAR HISTÓRICO NO MONGODB
 
                 movimentacoes.insertOne(
                     sessao,
@@ -521,7 +532,7 @@ public class MovimentacoesService {
 
             } catch (MongoException erro) {
 
-                // CANCELAR TRANSAÇÃO ATIVA
+                // TENTAR CANCELAR TRANSAÇÃO ATIVA
 
                 if (sessao.hasActiveTransaction()) {
 
@@ -531,14 +542,12 @@ public class MovimentacoesService {
 
                     } catch (Exception ignorado) {
 
-                        // Verificar a operação pela chave
+                        // CONFERIR A OPERAÇÃO PELA CHAVE
                     }
                 }
 
-                // CONFERIR RESULTADO DA OPERAÇÃO
+                // CONFERIR SE A OPERAÇÃO FOI REGISTRADA
 
-                // Se o commit não foi confirmado, verifica
-                // se a movimentação foi registrada.
                 try {
 
                     Document existente =
@@ -599,10 +608,8 @@ public class MovimentacoesService {
         ObjectId usuarioId
     ) {
 
-        // CONFIRMAR PROPRIETÁRIO
+        // CONFIRMAR PROPRIETÁRIO DA CHAVE
 
-        // Não permite reutilizar uma chave pertencente
-        // a outra conta.
         if (
             !usuarioId.equals(
                 existente.get("usuarioId")
@@ -631,7 +638,7 @@ public class MovimentacoesService {
             );
         }
 
-        // CHAVE UTILIZADA PARA OUTRA OPERAÇÃO
+        // CHAVE UTILIZADA EM OUTRA OPERAÇÃO
 
         return new Resultado(
             409,
