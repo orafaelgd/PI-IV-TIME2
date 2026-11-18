@@ -15,6 +15,8 @@ import controller.DashboardHandler;
 import controller.PerfilUsuarioHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
+import model.RepositorioVencimentos;
+import server.ServidorSocket;
 
 public class Main {
 
@@ -117,13 +119,6 @@ public class Main {
                                         "/api/lotes",
                                         lotesHandler);
 
-                        // PRÓXIMOS VENCIMENTOS
-                        servidor.createContext(
-                                        "/api/lotes/proximos-vencimento",
-                                        new ProximosVencimentoHandler(
-                                                        lotes,
-                                                        produtos));
-
                         // MOVIMENTAÇÕES
                         servidor.createContext(
                                         "/api/movimentacoes",
@@ -141,6 +136,13 @@ public class Main {
 
                         // INICIALIZAÇÃO
                         servidor.start();
+
+                        RepositorioVencimentos repositorio = new RepositorioVencimentos(lotes, produtos);
+
+                        Thread threadServidor = new Thread(
+                                        new ServidorSocket(repositorio));
+
+                        threadServidor.start();
 
                         System.out.println(
                                         "Servidor iniciado em http://localhost:8080/");

@@ -59,9 +59,6 @@ async function carregarIndicadores() {
     document.querySelector("#total-produtos").textContent =
       dadosDashboard.totalProdutos;
 
-    document.querySelector("#lotes-proximos").textContent =
-      dadosDashboard.lotesProximosVencimento;
-
     document.querySelector("#total-desperdicios").textContent =
       dadosRelatorios.desperdicados;
   } catch (erro) {
@@ -74,7 +71,7 @@ async function carregarProximosVencimentos() {
 
   try {
     const resposta = await fetch(
-      `${API_URL}/api/lotes/proximos-vencimento?dias=7`,
+      "http://localhost:8081/api/lotes/proximos-vencimento?dias=7",
     );
 
     if (!resposta.ok) {
@@ -82,6 +79,8 @@ async function carregarProximosVencimentos() {
     }
 
     const dados = await resposta.json();
+
+    document.querySelector("#lotes-proximos").textContent = dados.total;
 
     // Remove os dados anteriores da tabela
     tabela.replaceChildren();
@@ -135,6 +134,8 @@ async function carregarProximosVencimentos() {
     console.error("Erro ao carregar vencimentos:", erro);
     tabela.innerHTML =
       '<tr><td colspan="3">Erro ao carregar vencimentos.</td></tr>';
+
+    document.querySelector("#lotes-proximos").textContent = "—";
   }
 }
 

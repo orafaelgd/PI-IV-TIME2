@@ -19,75 +19,59 @@ import java.util.List;
 
 public class DashboardService {
 
-    private final MongoCollection<Document> itens;
-    private final MongoCollection<Document> lotes;
+        private final MongoCollection<Document> itens;
+        private final MongoCollection<Document> lotes;
 
-    public DashboardService(MongoCollection<Document> it, MongoCollection<Document> lt) {
-        this.itens = it;
-        this.lotes = lt;
-    }
+        public DashboardService(MongoCollection<Document> it, MongoCollection<Document> lt) {
+                this.itens = it;
+                this.lotes = lt;
+        }
 
-    // Consulta os indicadores e prepara os dados do resumo do Dashboard.
-    public Document consultarResumo() {
-        long totalProdutos = itens.countDocuments();
-        long totalLotes = lotes.countDocuments();
+        // Consulta os indicadores e prepara os dados do resumo do Dashboard.
+        public Document consultarResumo() {
+                long totalProdutos = itens.countDocuments();
+                long totalLotes = lotes.countDocuments();
 
-        ZoneId fuso = ZoneId.of("America/Sao_Paulo");
-        LocalDate hoje = LocalDate.now(fuso);
+                ZoneId fuso = ZoneId.of("America/Sao_Paulo");
+                LocalDate hoje = LocalDate.now(fuso);
 
-        // A data de validade é armazenada à meia-noite UTC.
-        Date inicio = Date.from(
-                hoje.atStartOfDay(ZoneOffset.UTC).toInstant());
+                // A data de validade é armazenada à meia-noite UTC.
+                Date inicio = Date.from(
+                                hoje.atStartOfDay(ZoneOffset.UTC).toInstant());
 
-        Date fim = Date.from(
-                hoje.plusDays(7).atStartOfDay(ZoneOffset.UTC).toInstant());
+                long produtosAtivos = itens.countDocuments(
+                                Filters.eq("status", "ativo"));
+                long produtosInativos = itens.countDocuments(
+                                Filters.eq("status", "inativo"));
 
-        // Conta somente lotes elegíveis da listagem de próximos vencimentos.
-        Document proximosVencimento = lotes.aggregate(List.of(
-                Aggregates.match(Filters.and(
-                        Filters.gte("dataValidade", inicio),
-                        Filters.lt("dataValidade", fim),
-                        Filters.gt("quantidadeDisponivel", new Decimal128(BigDecimal.ZERO)),
-                        Filters.ne("arquivado", true))),
-                Aggregates.lookup(itens.getNamespace().getCollectionName(), "itemId", "_id", "produto"),
-                Aggregates.unwind("$produto"),
-                Aggregates.match(Filters.regex("produto.status", "^ativo$", "i")),
-                Aggregates.count("total"))).first();
+                List<Document> saldosPorProduto = lotes.aggregate(
+                                List.of(
+                                                Aggregates.match(
+                                                                Filters.and(
+                                                                                Filters.gte("dataValidade", inicio),
+                                                                                Filters.gt(
+                                                                                                "quantidadeDisponivel",
+                                                                                                new Decimal128(BigDecimal.ZERO)))),
 
-        long lotesProximosVencimento = proximosVencimento == null ? 0
-                : proximosVencimento.get("total", Number.class).longValue();
+                                                Aggregates.group(
+                                                                "$itemId",
+                                                                Accumulators.sum("quantidadeTotal",
+                                                                                "$quantidadeDisponivel")),
+                                                Aggregates.lookup(itens.getNamespace().getCollectionName(), "_id",
+                                                                "_id", "produto"),
+                                                Aggregates.unwind("$produto"),
+                                                Aggregates.project(Projections.include("_id", "quantidadeTotal"))
 
-        long produtosAtivos = itens.countDocuments(
-                Filters.eq("status", "ativo"));
-        long produtosInativos = itens.countDocuments(
-                Filters.eq("status", "inativo"));
+                                ))
+                                .into(new ArrayList<>());
 
-        List<Document> saldosPorProduto = lotes.aggregate(
-                List.of(
-                        Aggregates.match(
-                                Filters.and(
-                                        Filters.gte("dataValidade", inicio),
-                                        Filters.gt(
-                                                "quantidadeDisponivel", new Decimal128(BigDecimal.ZERO)))),
+                Document resumo = new Document()
+                                .append("totalProdutos", totalProdutos)
+                                .append("produtosAtivos", produtosAtivos)
+                                .append("produtosInativos", produtosInativos)
+                                .append("totalLotes", totalLotes)
+                                .append("saldoPorProduto", saldosPorProduto);
 
-                        Aggregates.group(
-                                "$itemId",
-                                Accumulators.sum("quantidadeTotal", "$quantidadeDisponivel")),
-                        Aggregates.lookup(itens.getNamespace().getCollectionName(), "_id", "_id", "produto"),
-                        Aggregates.unwind("$produto"),
-                        Aggregates.project(Projections.include("_id", "quantidadeTotal"))
-
-                ))
-                .into(new ArrayList<>());
-
-        Document resumo = new Document()
-                .append("totalProdutos", totalProdutos)
-                .append("produtosAtivos", produtosAtivos)
-                .append("produtosInativos", produtosInativos)
-                .append("totalLotes", totalLotes)
-                .append("lotesProximosVencimento", lotesProximosVencimento)
-                .append("saldoPorProduto", saldosPorProduto);
-
-        return resumo;
-    }
+                return resumo;
+        }
 }
