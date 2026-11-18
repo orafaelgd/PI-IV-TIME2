@@ -18,6 +18,8 @@ import controller.PerfilUsuarioHandler;
 import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
+import model.RepositorioVencimentos;
+import server.ServidorSocket;
 
 public class Main {
 
@@ -123,7 +125,8 @@ public class Main {
                 loginHandler
             );
 
-            // PERFIL DO USUÁRIO
+                        // INICIALIZAÇÃO
+                        servidor.start();
 
             servidor.createContext(
                 "/api/perfil",
@@ -133,7 +136,8 @@ public class Main {
                 )
             );
 
-            // DASHBOARD
+                        Thread threadServidor = new Thread(
+                                        new ServidorSocket(repositorio));
 
             // Valida a sessão e consulta dados da conta
             DashboardHandler dashboardHandler =
@@ -258,10 +262,12 @@ public class Main {
                 "MongoDB conectado com sucesso!"
             );
 
-        } catch (Exception erro) {
+                        System.out.println(
+                                        "MongoDB conectado com sucesso!");
 
-            cliente.close();
-            throw erro;
+                } catch (Exception erro) {
+                        cliente.close();
+                        throw erro;
+                }
         }
-    }
 }
