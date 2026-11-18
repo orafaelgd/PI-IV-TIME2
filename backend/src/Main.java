@@ -12,9 +12,12 @@ import com.mongodb.client.model.IndexOptions;
 import org.bson.Document;
 
 import controller.DashboardHandler;
+import controller.LotesHandler;
 import controller.PerfilUsuarioHandler;
+import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
+
 
 public class Main {
 
