@@ -131,6 +131,12 @@ public class Main {
                                                         cliente,
                                                         lotes,
                                                         movimentacoes));
+                        
+                        // HISTÓRICO DE DESPERDÍCIO
+                        servidor.createContext(
+                                        "/api/saidas",
+                                        new controller.HistoricoDespHandler(banco));
+
 
                         // ENCERRAMENTO SEGURO
                         Runtime.getRuntime().addShutdownHook(
