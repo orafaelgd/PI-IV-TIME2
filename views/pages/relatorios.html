@@ -1,104 +1,204 @@
-<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ALTERE O NOME EM CADA PÁGINA -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
     <title>Relatórios | Gestão de Desperdício</title>
 
-    <link rel="stylesheet" href="../../public/css/style.css" />
-  </head>
+    <!-- ESTILIZAÇÃO -->
+    <link rel="stylesheet" href="../../public/css/style.css">
 
-  <body class="flex min-h-screen flex-col bg-background md:flex-row">
-    <aside id="aside-placeholder" class="w-full shrink-0 md:w-[180px]"></aside>
+    <style>
+        /* SETINHA DO FILTRO */
 
+        #filtro-unidade {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+
+            min-width: 100px;
+            padding-right: 36px;
+
+            background-color: #e9ebee;
+
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23243547' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+            background-repeat: no-repeat;
+            background-position: right 11px center;
+            background-size: 14px 14px;
+
+            cursor: pointer;
+        }
+
+        #filtro-unidade:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body class="flex min-h-screen flex-col bg-background md:flex-row">
+
+    <!-- MENU LATERAL -->
+    <aside id="aside-placeholder"
+        class="w-full shrink-0 md:w-[180px]"></aside>
+
+    <!-- CONTEÚDO PRINCIPAL -->
     <div class="flex min-w-0 flex-1 flex-col">
-      <div id="header-placeholder"></div>
 
-      <main class="flex-1">
-        <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
-          <h1 class="mb-6 text-2xl font-bold text-text-secondary md:text-3xl">
-            Relatórios
-          </h1>
+        <!-- CABEÇALHO -->
+        <div id="header-placeholder"></div>
 
-          <div class="flex flex-wrap items-center gap-8 mt-5 justify-center">
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <h2>Desperdiçados</h2>
-              <p id="indicador-desperdicados">--</p>
+        <main class="flex-1">
+
+            <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
+
+                <!-- TÍTULO DA PÁGINA -->
+                <h1 class="mb-6 text-2xl font-bold text-text-secondary md:text-3xl">
+                    Relatórios
+                </h1>
+
+                <!-- CARDS DOS INDICADORES -->
+                <section
+                    aria-label="Indicadores de desperdício"
+                    class="mt-5 flex flex-wrap items-center justify-center gap-8">
+
+                    <!-- TOTAL DE DESPERDÍCIOS -->
+                    <div
+                        class="w-60 rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl">
+
+                        <h2>Desperdiçados</h2>
+
+                        <p id="indicador-desperdicados"
+                            class="mt-2 text-xl font-bold">
+                            --
+                        </p>
+                    </div>
+
+                    <!-- TOTAL DE PRODUTOS REGISTRADOS -->
+                    <div
+                        class="w-60 rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl">
+
+                        <h2>Registrados</h2>
+
+                        <p id="indicador-registrados"
+                            class="mt-2 text-xl font-bold">
+                            --
+                        </p>
+                    </div>
+
+                    <!-- PERDAS FINANCEIRAS -->
+                    <div
+                        class="w-60 rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl">
+
+                        <h2>Perdas (R$)</h2>
+
+                        <p id="indicador-perdas"
+                            class="mt-2 text-xl font-bold">
+                            --
+                        </p>
+                    </div>
+
+                    <!-- MOTIVO MAIS FREQUENTE -->
+                    <div
+                        class="w-60 rounded-xl bg-white p-6 text-center font-semibold text-text shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl">
+
+                        <h2>Motivo</h2>
+
+                        <p id="indicador-motivo"
+                            class="mt-2 break-words text-sm font-bold">
+                            --
+                        </p>
+                    </div>
+                </section>
+
+                <!-- GRÁFICOS -->
+                <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+                    <!-- GRÁFICO DE MOTIVOS -->
+                    <section
+                        class="min-w-0 rounded-xl bg-white p-4 text-text shadow-md">
+
+                        <h2 class="text-center text-sm font-medium">
+                            Produtos mais desperdiçados
+                        </h2>
+
+                        <!-- GRÁFICO PIZZA -->
+                        <div id="pizza-chart"
+                            class="mt-4"
+                            aria-label="Gráfico de desperdícios por motivo">
+                        </div>
+                    </section>
+
+                    <!-- GRÁFICO DE QUANTIDADES -->
+                    <section
+                        class="min-w-0 rounded-xl bg-white p-4 text-text shadow-md lg:col-span-2">
+
+                        <h2 class="text-center text-sm font-medium">
+                            Quantidade desperdiçada por produto
+                        </h2>
+
+                        <!-- FILTRO DE UNIDADE -->
+                        <div class="mt-3 flex items-center justify-end gap-2">
+
+                            <label for="filtro-unidade"
+                                class="text-xs">
+                                Unidade:
+                            </label>
+
+                            <select id="filtro-unidade"
+                                disabled
+                                class="h-[28px] rounded border border-gray-400 px-3 text-[11px] text-text outline-none">
+
+                                <option value="">
+                                    Carregando...
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- GRÁFICO DE BARRAS -->
+                        <div id="barras-chart"
+                            class="mt-4"
+                            aria-label="Gráfico de quantidade desperdiçada por produto">
+                        </div>
+                    </section>
+                </div>
+
+                <!-- MENSAGENS DE ERRO -->
+                <p id="mensagemRelatorios"
+                    class="mt-4 hidden text-xs text-red-600"
+                    role="alert"></p>
+
+                <!-- EXPORTAR RELATÓRIO -->
+                <div class="mt-4 flex justify-end">
+
+                    <button id="exportar-relatorio"
+                        type="button"
+                        class="cursor-pointer rounded-sm bg-primary px-6 py-2 text-xs text-white hover:bg-primary-dark disabled:opacity-50">
+
+                        Exportar
+                    </button>
+                </div>
             </div>
+        </main>
 
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <h2>Registrados</h2>
-              <p id="indicador-registrados">--</p>
-            </div>
-
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <h2>Perdas (R$)</h2>
-              <p id="indicador-perdas">--</p>
-            </div>
-
-            <div
-              class="bg-white rounded-xl shadow-md p-6 w-60 text-center transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl text-text font-semibold"
-            >
-              <h2>Motivo</h2>
-              <p id="indicador-motivo">--</p>
-            </div>
-          </div>
-
-          <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <section
-              class="min-w-0 rounded-xl bg-white p-4 text-text shadow-md"
-            >
-              <h2 class="text-center text-sm font-medium">
-                Produtos mais desperdiçados
-              </h2>
-              <div id="pizza-chart" class="mt-4"></div>
-            </section>
-
-            <section
-              class="min-w-0 rounded-xl bg-white p-4 text-text shadow-md lg:col-span-2"
-            >
-              <h2 class="text-center text-sm font-medium">
-                Quantidade desperdiçada por produto
-              </h2>
-
-              <div class="mt-3 flex items-center justify-end gap-2">
-                <label for="filtro-unidade" class="text-xs"> Unidade: </label>
-
-                <select
-                  id="filtro-unidade"
-                  class="rounded border px-2 py-1 text-xs"
-                ></select>
-              </div>
-
-              <div id="barras-chart" class="mt-4"></div>
-            </section>
-          </div>
-
-          <div class="mt-4 flex justify-end">
-            <button
-              id="exportar-relatorio"
-              type="button"
-              class="cursor-pointer rounded-sm bg-primary px-6 py-2 text-xs text-white hover:bg-primary-dark"
-            >
-              Exportar
-            </button>
-          </div>
-        </div>
-      </main>
-
-      <div id="footer-placeholder"></div>
+        <!-- RODAPÉ -->
+        <div id="footer-placeholder"></div>
     </div>
 
+    <!-- BIBLIOTECA DOS GRÁFICOS -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.46.0/dist/apexcharts.min.js"></script>
-    <script src="../../public/js/relatorios.js"></script>
+
+    <!-- COMPONENTES -->
     <script src="../../public/js/load-partials.js"></script>
-  </body>
+
+    <!-- RELATÓRIOS -->
+    <script src="../../public/js/relatorios.js"></script>
+
+</body>
 </html>

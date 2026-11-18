@@ -1,243 +1,476 @@
-const options = {
-  chart: {
-    type: "area",
-    height: 280,
-    toolbar: {
-      show: false,
-    },
-  },
 
-  // Vou usar os dados do Banco Aqui
-  series: [
-    {
-      name: "Produtos Perdidos",
-      data: [],
-    },
-  ],
+// DASHBOARD INICIAL
 
-  xaxis: {
-    categories: [],
-  },
+document.addEventListener("DOMContentLoaded", async () => {
 
-  colors: ["#1F6F78"],
+    // CONFIGURAÇÕES
 
-  stroke: {
-    curve: "smooth",
-    width: 3,
-  },
+    const API_URL = "http://localhost:8080";
+    const PAGINA_LOGIN = "login-usuario.html";
 
-  dataLabels: {
-    enabled: false,
-  },
-};
+    // ELEMENTOS DA TELA
 
-const API_URL = "http://localhost:8080";
+    const elementoNome =
+        document.querySelector("#nome-usuario");
 
-async function carregarIndicadores() {
-  try {
-    // Busca os indicadores do Dashboard
-    const respostaDashboard = await fetch(`${API_URL}/api/dashboard/resumo`);
+    const totalProdutos =
+        document.querySelector("#total-produtos");
 
-    if (!respostaDashboard.ok) {
-      throw new Error("Erro ao consultar Dashboard");
+    const lotesProximos =
+        document.querySelector("#lotes-proximos");
+
+    const totalDesperdicios =
+        document.querySelector("#total-desperdicios");
+
+    const tabelaVencimentos =
+        document.querySelector(
+            "#tabela-proximos-vencimentos"
+        );
+
+    const elementoGrafico =
+        document.querySelector("#area-chart");
+
+    // AUTENTICAÇÃO
+
+    // Recupera o token salvo no login
+    function obterToken() {
+
+        return sessionStorage.getItem("token");
     }
 
-    const dadosDashboard = await respostaDashboard.json();
+    // Limpa a sessão e retorna ao login
+    function encerrarAcesso() {
 
-    // Busca os indicadores de desperdício
-    const respostaRelatorios = await fetch(
-      `${API_URL}/api/relatorios/indicadores`,
-    );
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
 
-    if (!respostaRelatorios.ok) {
-      throw new Error("Erro ao consultar Relatórios");
+        window.location.replace(PAGINA_LOGIN);
     }
 
-    const dadosRelatorios = await respostaRelatorios.json();
+    // REQUISIÇÕES AUTENTICADAS
 
-    // Atualiza os cards HTML
-    document.querySelector("#total-produtos").textContent =
-      dadosDashboard.totalProdutos;
+    // Envia o token ao backend
+    async function requisicaoAutenticada(
+        url,
+        opcoes = {}
+    ) {
 
-    document.querySelector("#lotes-proximos").textContent =
-      dadosDashboard.lotesProximosVencimento;
+        const token = obterToken();
 
-    document.querySelector("#total-desperdicios").textContent =
-      dadosRelatorios.desperdicados;
-  } catch (erro) {
-    console.error("Erro ao carregar indicadores:", erro);
-  }
-}
+        if (!token || !token.trim()) {
 
-async function carregarProximosVencimentos() {
-  const tabela = document.querySelector("#tabela-proximos-vencimentos");
+            encerrarAcesso();
 
-  try {
-    const resposta = await fetch(
-      `${API_URL}/api/lotes/proximos-vencimento?dias=7`,
-    );
+            throw new Error(
+                "Sessão não encontrada."
+            );
+        }
 
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar próximos vencimentos");
+        const headers = new Headers(
+            opcoes.headers || {}
+        );
+
+        headers.set(
+            "Authorization",
+            `Bearer ${token}`
+        );
+
+        const resposta = await fetch(url, {
+            ...opcoes,
+            headers,
+            cache: "no-store"
+        });
+
+        // Sessão inválida ou expirada
+        if (resposta.status === 401) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sessão expirada. Faça login novamente."
+            );
+        }
+
+        if (resposta.status === 403) {
+
+            throw new Error(
+                "Você não tem permissão para esta operação."
+            );
+        }
+
+        return resposta;
     }
 
-    const dados = await resposta.json();
+    // LER RESPOSTA DO BACKEND
 
-    // Remove os dados anteriores da tabela
-    tabela.replaceChildren();
+    async function lerResposta(resposta) {
 
-    // Verifica se não existem lotes próximos do vencimento
-    if (dados.lotes.length === 0) {
-      const linha = document.createElement("tr");
-      const coluna = document.createElement("td");
+        const texto = await resposta.text();
 
-      coluna.colSpan = 3;
-      coluna.textContent = "Nenhum lote próximo do vencimento.";
+        let dados = {};
 
-      linha.appendChild(coluna);
-      tabela.appendChild(linha);
-      return;
+        if (texto) {
+
+            try {
+
+                dados = JSON.parse(texto);
+
+            } catch {
+
+                dados = {
+                    mensagem: texto
+                };
+            }
+        }
+
+        if (!resposta.ok) {
+
+            throw new Error(
+                dados.mensagem ||
+                `Erro HTTP ${resposta.status}`
+            );
+        }
+
+        return dados;
     }
 
-    for (const lote of dados.lotes) {
-      const linha = document.createElement("tr");
+    // FORMATAR QUANTIDADE
 
-      const colunaProduto = document.createElement("td");
-      colunaProduto.textContent = lote.produtoNome;
+    function formatarQuantidade(valor) {
 
-      const colunaQuantidade = document.createElement("td");
-      colunaQuantidade.textContent = `${lote.quantidadeDisponivel} ${lote.unidadeMedida}`;
+        const numero = Number(valor);
 
-      const colunaValidade = document.createElement("td");
+        if (
+            valor == null ||
+            valor === "" ||
+            !Number.isFinite(numero)
+        ) {
 
-      const diasRestantes = Math.round(
-        (Date.parse(lote.dataValidade) - Date.parse(dados.dataInicio)) /
-          86400000,
-      );
+            return "-";
+        }
 
-      if (diasRestantes === 0) {
-        colunaValidade.textContent = "Vence hoje";
-      } else if (diasRestantes === 1) {
-        colunaValidade.textContent = "Vence amanhã";
-      } else {
-        colunaValidade.textContent = `Vence em ${diasRestantes} dias`;
-      }
-
-      if (diasRestantes <= 1) {
-        colunaValidade.classList.add("text-danger");
-      }
-
-      linha.append(colunaProduto, colunaQuantidade, colunaValidade);
-
-      tabela.appendChild(linha);
-    }
-  } catch (erro) {
-    console.error("Erro ao carregar vencimentos:", erro);
-    tabela.innerHTML =
-      '<tr><td colspan="3">Erro ao carregar vencimentos.</td></tr>';
-  }
-}
-
-async function carregarEvolucaoMensal() {
-  try {
-    const resposta = await fetch(
-      `${API_URL}/api/relatorios/desperdicios/evolucao-mensal`,
-    );
-
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar evolução mensal");
+        return numero.toLocaleString("pt-BR", {
+            maximumFractionDigits: 3
+        });
     }
 
-    const dados = await resposta.json();
+    // LIMPAR TABELA
 
-    const nomesMes = [
-      "Jan",
-      "Fev",
-      "Mar",
-      "Abr",
-      "Mai",
-      "Jun",
-      "Jul",
-      "Ago",
-      "Set",
-      "Out",
-      "Nov",
-      "Dez",
-    ];
+    // Exibe uma mensagem quando não há registros
+    function mostrarMensagemTabela(texto) {
 
-    const meses = dados.evolucaoMensal.map((registro) => {
-      const [ano, mes] = registro.mes.split("-");
+        tabelaVencimentos.replaceChildren();
 
-      return `${nomesMes[Number(mes) - 1]}/${ano.slice(-2)}`;
-    });
+        const linha =
+            document.createElement("tr");
 
-    const ocorrencias = dados.evolucaoMensal.map(
-      (registro) => registro.totalOcorrencias,
-    );
+        const coluna =
+            document.createElement("td");
 
-    grafico.updateOptions({
-      xaxis: {
-        categories: meses,
-      },
-    });
+        coluna.colSpan = 3;
 
-    grafico.updateSeries([
-      {
-        name: "Ocorrências de desperdício",
-        data: ocorrencias,
-      },
-    ]);
-  } catch (error) {
-    console.log("Erro ao carregar evolução mensal:", error);
-  }
-}
+        coluna.className =
+            "px-3 py-4 text-center text-text-secondary";
 
-async function carregarNomeUsuario() {
-  const elementoNome = document.querySelector("#nome-usuario");
+        coluna.textContent = texto;
 
-  // Recupera o token salvo durante o login
-  const token = sessionStorage.getItem("token");
+        linha.appendChild(coluna);
 
-  if (!token) {
-    elementoNome.textContent = "Visitante";
-    return;
-  }
-
-  try {
-    const resposta = await fetch(`${API_URL}/api/usuario`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    // Sessão inválida ou expirada
-    if (resposta.status === 401) {
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("usuario");
-
-      elementoNome.textContent = "Sessão expirada";
-      return;
+        tabelaVencimentos.appendChild(linha);
     }
 
-    if (!resposta.ok) {
-      throw new Error("Erro ao consultar usuário");
+    // CARREGAR NOME DO USUÁRIO
+
+    async function carregarNomeUsuario() {
+
+        try {
+
+            const resposta =
+                await requisicaoAutenticada(
+                    `${API_URL}/api/usuario`
+                );
+
+            const usuario =
+                await lerResposta(resposta);
+
+            elementoNome.textContent =
+                usuario.nome || "Usuário";
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar usuário:",
+                erro
+            );
+
+            elementoNome.textContent =
+                "Usuário indisponível";
+        }
     }
 
-    const usuario = await resposta.json();
+    // CARREGAR INDICADORES
 
-    elementoNome.textContent = usuario.nome || "Usuário";
-  } catch (erro) {
-    console.error("Erro ao carregar nome:", erro);
-    elementoNome.textContent = "Usuário indisponível";
-  }
-}
+    // Busca o resumo da conta autenticada
+    async function carregarIndicadores() {
 
-const elemento = document.querySelector("#area-chart");
-const grafico = new ApexCharts(elemento, options);
+        try {
 
-carregarNomeUsuario();
-carregarIndicadores();
-carregarProximosVencimentos();
-grafico.render().then(() => {
-  carregarEvolucaoMensal();
+            const resposta =
+                await requisicaoAutenticada(
+                    `${API_URL}/api/dashboard/resumo`
+                );
+
+            const dados =
+                await lerResposta(resposta);
+
+            // TOTAL DE PRODUTOS
+
+            totalProdutos.textContent =
+                dados.totalProdutos ?? 0;
+
+            // LOTES PRÓXIMOS DO VENCIMENTO
+
+            lotesProximos.textContent =
+                dados.lotesProximosVencimento ?? 0;
+
+            // TABELA DE PRÓXIMOS VENCIMENTOS
+
+            carregarProximosVencimentos(
+                dados.proximosVencimentos || []
+            );
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar Dashboard:",
+                erro
+            );
+
+            totalProdutos.textContent = "--";
+
+            lotesProximos.textContent = "--";
+
+            mostrarMensagemTabela(
+                "Não foi possível carregar os vencimentos."
+            );
+        }
+    }
+
+    // CARREGAR PRÓXIMOS VENCIMENTOS
+
+    // Usa os lotes já filtrados pelo DashboardService
+    function carregarProximosVencimentos(lotes) {
+
+        tabelaVencimentos.replaceChildren();
+
+        if (
+            !Array.isArray(lotes) ||
+            lotes.length === 0
+        ) {
+
+            mostrarMensagemTabela(
+                "Nenhum lote próximo do vencimento."
+            );
+
+            return;
+        }
+
+        // CRIAR LINHAS
+
+        lotes.forEach((lote) => {
+
+            const linha =
+                document.createElement("tr");
+
+            linha.className =
+                "border-b border-gray-200";
+
+            // NOME DO PRODUTO
+
+            const colunaProduto =
+                document.createElement("td");
+
+            colunaProduto.className =
+                "px-3 py-3";
+
+            colunaProduto.textContent =
+                lote.produtoNome ||
+                "Produto não encontrado";
+
+            // QUANTIDADE DISPONÍVEL
+
+            const colunaQuantidade =
+                document.createElement("td");
+
+            colunaQuantidade.className =
+                "px-3 py-3";
+
+            const quantidade =
+                formatarQuantidade(
+                    lote.quantidadeDisponivel
+                );
+
+            const unidade =
+                lote.unidadeMedida || "";
+
+            colunaQuantidade.textContent =
+                `${quantidade} ${unidade}`.trim();
+
+            // DATA DE VALIDADE
+
+            const colunaValidade =
+                document.createElement("td");
+
+            colunaValidade.className =
+                "px-3 py-3";
+
+            const diasRestantes =
+                Number(lote.diasRestantes);
+
+            if (diasRestantes === 0) {
+
+                colunaValidade.textContent =
+                    "Vence hoje";
+
+            } else if (diasRestantes === 1) {
+
+                colunaValidade.textContent =
+                    "Vence amanhã";
+
+            } else if (
+                Number.isFinite(diasRestantes)
+            ) {
+
+                colunaValidade.textContent =
+                    `Vence em ${diasRestantes} dias`;
+
+            } else {
+
+                colunaValidade.textContent =
+                    "Validade não informada";
+            }
+
+            // Destaca os lotes que vencem primeiro
+            if (
+                Number.isFinite(diasRestantes) &&
+                diasRestantes <= 1
+            ) {
+
+                colunaValidade.classList.add(
+                    "text-danger"
+                );
+            }
+
+            linha.append(
+                colunaProduto,
+                colunaQuantidade,
+                colunaValidade
+            );
+
+            tabelaVencimentos.appendChild(
+                linha
+            );
+        });
+    }
+
+    // CONFIGURAR GRÁFICO
+
+    // Mantém o visual original do ApexCharts
+    const options = {
+
+        chart: {
+            type: "area",
+            height: 280,
+
+            toolbar: {
+                show: false
+            }
+        },
+
+        series: [
+            {
+                name: "Ocorrências de desperdício",
+                data: []
+            }
+        ],
+
+        xaxis: {
+            categories: []
+        },
+
+        colors: ["#1F6F78"],
+
+        stroke: {
+            curve: "smooth",
+            width: 3
+        },
+
+        dataLabels: {
+            enabled: false
+        },
+
+        noData: {
+            text: "Aguardando integração dos relatórios"
+        }
+    };
+
+    // INICIALIZAR GRÁFICO
+
+    // Não consulta relatórios globais de outros usuários
+    async function iniciarGrafico() {
+
+        if (
+            !elementoGrafico ||
+            typeof ApexCharts === "undefined"
+        ) {
+
+            console.error(
+                "Biblioteca ou elemento do gráfico não encontrado."
+            );
+
+            return;
+        }
+
+        try {
+
+            const grafico = new ApexCharts(
+                elementoGrafico,
+                options
+            );
+
+            await grafico.render();
+
+        } catch (erro) {
+
+            console.error(
+                "Erro ao carregar gráfico:",
+                erro
+            );
+        }
+    }
+
+    // INICIALIZAR DASHBOARD
+
+    async function iniciar() {
+
+        // Verifica o token antes de carregar a página
+        if (!obterToken()) {
+
+            encerrarAcesso();
+
+            return;
+        }
+
+        // Não usa os relatórios globais enquanto
+        // suas rotas não estiverem protegidas
+        totalDesperdicios.textContent = "--";
+
+        await Promise.all([
+            carregarNomeUsuario(),
+            carregarIndicadores(),
+            iniciarGrafico()
+        ]);
+    }
+
+    iniciar();
 });
