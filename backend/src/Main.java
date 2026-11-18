@@ -18,249 +18,168 @@ import controller.PerfilUsuarioHandler;
 import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
+
 import model.RepositorioVencimentos;
 import server.ServidorSocket;
 
 public class Main {
 
-    public static void main(String[] args) throws Exception {
+        public static void main(String[] args) throws Exception {
 
-        MongoClient cliente =
-            MongoDBConnection.conectar();
+                MongoClient cliente = MongoDBConnection.conectar();
 
-        try {
+                try {
+                        // CONEXÃO COM O BANCO
+                        MongoDatabase banco = cliente.getDatabase(
+                                        "desperdicio_alimentos");
 
-            // CONEXÃO COM O BANCO
+                        banco.runCommand(new Document("ping", 1));
 
-            MongoDatabase banco =
-                cliente.getDatabase(
-                    "desperdicio_alimentos"
-                );
+                        // COLEÇÕES DO MONGODB
+                        MongoCollection<Document> usuarios = banco.getCollection("users");
 
-            banco.runCommand(
-                new Document("ping", 1)
-            );
+                        MongoCollection<Document> sessoes = banco.getCollection("sessoes");
 
-            // COLEÇÕES DO MONGODB
+                        MongoCollection<Document> produtos = banco.getCollection("itens");
 
-            MongoCollection<Document> usuarios =
-                banco.getCollection("users");
+                        MongoCollection<Document> lotes = banco.getCollection("lotes");
 
-            MongoCollection<Document> sessoes =
-                banco.getCollection("sessoes");
+                        MongoCollection<Document> movimentacoes = banco.getCollection("movimentacoes");
 
-            MongoCollection<Document> produtos =
-                banco.getCollection("itens");
+                        MongoCollection<Document> categorias = banco.getCollection("categorias");
 
-            MongoCollection<Document> lotes =
-                banco.getCollection("lotes");
+                        // ÍNDICES DE USUÁRIOS E SESSÕES
+                        usuarios.createIndex(
+                                        Indexes.ascending("email"),
+                                        new IndexOptions().unique(true));
 
-            MongoCollection<Document> movimentacoes =
-                banco.getCollection("movimentacoes");
+                        sessoes.createIndex(
+                                        Indexes.ascending("token"),
+                                        new IndexOptions().unique(true));
 
-            MongoCollection<Document> categorias =
-                banco.getCollection("categorias");
+                        sessoes.createIndex(
+                                        Indexes.ascending("expiraEm"),
+                                        new IndexOptions().expireAfter(
+                                                        0L, TimeUnit.SECONDS));
 
-            // ÍNDICES DE USUÁRIOS E SESSÕES
+                        // SERVIDOR HTTP ORIGINAL
+                        HttpServer servidor = HttpServer.create(
+                                        new InetSocketAddress("127.0.0.1", 8080),
+                                        0);
 
-            // Impede e-mails duplicados
-            usuarios.createIndex(
-                Indexes.ascending("email"),
-                new IndexOptions().unique(true)
-            );
+                        // USUÁRIOS
+                        servidor.createContext(
+                                        "/api/usuarios",
+                                        new UsuariosHandler(usuarios));
 
-            // Garante tokens únicos
-            sessoes.createIndex(
-                Indexes.ascending("token"),
-                new IndexOptions().unique(true)
-            );
+                        // LOGIN E SESSÕES
+                        LoginHandler loginHandler = new LoginHandler(usuarios, sessoes);
 
-            // Remove sessões expiradas
-            sessoes.createIndex(
-                Indexes.ascending("expiraEm"),
-                new IndexOptions().expireAfter(
-                    0L,
-                    TimeUnit.SECONDS
-                )
-            );
+                        servidor.createContext("/api/login", loginHandler);
+                        servidor.createContext("/api/logout", loginHandler);
+                        servidor.createContext("/api/usuario", loginHandler);
 
-            // SERVIDOR HTTP
+                        // PERFIL DO USUÁRIO
+                        servidor.createContext(
+                                        "/api/perfil",
+                                        new PerfilUsuarioHandler(usuarios, sessoes));
 
-            HttpServer servidor =
-                HttpServer.create(
-                    new InetSocketAddress(
-                        "127.0.0.1",
-                        8080
-                    ),
-                    0
-                );
+                        // DASHBOARD
+                        DashboardHandler dashboardHandler = new DashboardHandler(
+                                        produtos,
+                                        lotes,
+                                        usuarios,
+                                        sessoes);
 
-            // CADASTRO DE USUÁRIOS
+                        servidor.createContext(
+                                        "/api/dashboard/resumo",
+                                        dashboardHandler);
 
-            servidor.createContext(
-                "/api/usuarios",
-                new UsuariosHandler(usuarios)
-            );
+                        // RELATÓRIOS
+                        RelatoriosHandler relatoriosHandler = new RelatoriosHandler(
+                                        produtos,
+                                        lotes,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
 
-            // LOGIN E SESSÕES
+                        servidor.createContext(
+                                        "/api/relatorios/",
+                                        relatoriosHandler);
 
-            LoginHandler loginHandler =
-                new LoginHandler(
-                    usuarios,
-                    sessoes
-                );
+                        // PRODUTOS E CATEGORIAS
+                        ProdutosHandler produtosHandler = new ProdutosHandler(
+                                        produtos,
+                                        categorias,
+                                        lotes,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
 
-            servidor.createContext(
-                "/api/login",
-                loginHandler
-            );
+                        servidor.createContext(
+                                        "/api/produtos",
+                                        produtosHandler);
 
-            servidor.createContext(
-                "/api/logout",
-                loginHandler
-            );
+                        servidor.createContext(
+                                        "/api/categorias",
+                                        produtosHandler);
 
-            servidor.createContext(
-                "/api/usuario",
-                loginHandler
-            );
+                        // LOTES
+                        LotesHandler lotesHandler = new LotesHandler(
+                                        lotes,
+                                        produtos,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
 
-                        // INICIALIZAÇÃO
-                        servidor.start();
+                        servidor.createContext(
+                                        "/api/lotes",
+                                        lotesHandler);
 
-            servidor.createContext(
-                "/api/perfil",
-                new PerfilUsuarioHandler(
-                    usuarios,
-                    sessoes
-                )
-            );
+                        // ROTA ANTIGA DE VENCIMENTOS
+                        // Mantida temporariamente para outras telas
+                        // servidor.createContext(
+                        // "/api/lotes/proximos-vencimento",
+                        // new ProximosVencimentoHandler(
+                        // lotes,
+                        // produtos));
 
+                        // MOVIMENTAÇÕES
+                        servidor.createContext(
+                                        "/api/movimentacoes",
+                                        new MovimentacoesHandler(
+                                                        cliente,
+                                                        lotes,
+                                                        movimentacoes));
+
+                        // HISTÓRICO DE DESPERDÍCIO
+                        servidor.createContext(
+                                        "/api/saidas",
+                                        new controller.HistoricoDespHandler(banco));
+
+                        // REPOSITÓRIO DO SERVIDOR SOCKET
+                        RepositorioVencimentos repositorio = new RepositorioVencimentos(
+                                        lotes,
+                                        produtos);
+
+                        // THREAD DO SERVIDOR SOCKET
                         Thread threadServidor = new Thread(
-                                        new ServidorSocket(repositorio));
+                                        new ServidorSocket(repositorio),
+                                        "servidor-vencimentos");
 
-            // Valida a sessão e consulta dados da conta
-            DashboardHandler dashboardHandler =
-                new DashboardHandler(
-                    produtos,
-                    lotes,
-                    usuarios,
-                    sessoes
-                );
+                        // ENCERRAMENTO SEGURO DO BACKEND ORIGINAL
+                        Runtime.getRuntime().addShutdownHook(
+                                        new Thread(() -> {
+                                                servidor.stop(0);
+                                                cliente.close();
+                                        }));
 
-            servidor.createContext(
-                "/api/dashboard/resumo",
-                dashboardHandler
-            );
+                        // INICIALIZAÇÃO DOS SERVIDORES
+                        servidor.start();
+                        threadServidor.start();
 
-            // RELATÓRIOS
-
-            // Valida a sessão e separa relatórios por usuário
-            RelatoriosHandler relatoriosHandler =
-                new RelatoriosHandler(
-                    produtos,
-                    lotes,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/relatorios/",
-                relatoriosHandler
-            );
-
-            // PRODUTOS E CATEGORIAS
-
-            ProdutosHandler produtosHandler =
-                new ProdutosHandler(
-                    produtos,
-                    categorias,
-                    lotes,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/produtos",
-                produtosHandler
-            );
-
-            servidor.createContext(
-                "/api/categorias",
-                produtosHandler
-            );
-
-            // LOTES
-
-            LotesHandler lotesHandler =
-                new LotesHandler(
-                    lotes,
-                    produtos,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/lotes",
-                lotesHandler
-            );
-
-            // PRÓXIMOS VENCIMENTOS
-
-            // Rota antiga mantida para outras telas
-            servidor.createContext(
-                "/api/lotes/proximos-vencimento",
-                new ProximosVencimentoHandler(
-                    lotes,
-                    produtos
-                )
-            );
-
-            // MOVIMENTAÇÕES
-
-            // Mantém a integração atual
-            servidor.createContext(
-                "/api/movimentacoes",
-                new MovimentacoesHandler(
-                    cliente,
-                    lotes,
-                    movimentacoes
-                )
-            );
-
-            // HISTÓRICO DE DESPERDÍCIO
-
-            servidor.createContext(
-                "/api/saidas",
-                new controller.HistoricoDespHandler(
-                    banco
-                )
-            );
-
-            // ENCERRAMENTO SEGURO
-
-            Runtime.getRuntime().addShutdownHook(
-                new Thread(() -> {
-
-                    servidor.stop(0);
-                    cliente.close();
-                })
-            );
-
-            // INICIALIZAÇÃO DO SERVIDOR
-
-            servidor.start();
-
-            System.out.println(
-                "Servidor iniciado em http://localhost:8080/"
-            );
-
-            System.out.println(
-                "MongoDB conectado com sucesso!"
-            );
+                        System.out.println(
+                                        "Servidor HTTP iniciado na porta 8080");
 
                         System.out.println(
                                         "MongoDB conectado com sucesso!");
