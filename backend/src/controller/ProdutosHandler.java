@@ -1,6 +1,6 @@
-package controller;
+// Código feito por Livia Carvalho Lucizano RA: 25017514
 
-import service.ProdutosService;
+package controller;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -15,55 +15,79 @@ import com.sun.net.httpserver.HttpHandler;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
+import service.ProdutosService;
+import service.SessaoService;
+
 public class ProdutosHandler implements HttpHandler {
 
-    // Service responsável pelas operações dos produtos.
+    // SERVIÇOS
+
+    // Gerencia as operações dos produtos
     private final ProdutosService service;
 
-    // Origens autorizadas a acessar a API.
+    // Verifica a sessão do usuário
+    private final SessaoService sessaoService;
+
+    // ORIGENS PERMITIDAS
+
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
     );
 
-    // Construtor: recebe as coleções do MongoDB.
-    // Mantém os mesmos parâmetros do Handler original.
+    // CONSTRUTOR
+
     public ProdutosHandler(
         MongoCollection<Document> itens,
         MongoCollection<Document> categorias,
         MongoCollection<Document> lotes,
-        MongoCollection<Document> movimentacoes
+        MongoCollection<Document> movimentacoes,
+        MongoCollection<Document> usuarios,
+        MongoCollection<Document> sessoes
     ) {
+
         this.service = new ProdutosService(
             itens, categorias, lotes, movimentacoes
         );
+
+        this.sessaoService = new SessaoService(
+            usuarios, sessoes
+        );
     }
 
-    // Recebe as requisições HTTP do frontend.
+    // ROTAS HTTP
+
     @Override
     public void handle(HttpExchange req) throws IOException {
 
         String origem = req.getRequestHeaders()
             .getFirst("Origin");
 
-        // Impede requisições de origens não autorizadas.
+        // Verifica se a origem é permitida
         if (origem != null && !ORIGENS.contains(origem)) {
             responder(req, 403, "Origem nao permitida.");
             return;
         }
 
-        // Configuração de CORS.
+        // CONFIGURAÇÃO DE CORS
+
         if (origem != null) {
+
             req.getResponseHeaders().set(
                 "Access-Control-Allow-Origin", origem
             );
+
+            // Permite enviar o token no cabeçalho
             req.getResponseHeaders().set(
-                "Access-Control-Allow-Headers", "Content-Type"
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization"
             );
+
             req.getResponseHeaders().set(
                 "Access-Control-Allow-Methods",
                 "GET, POST, PUT, PATCH, DELETE, OPTIONS"
             );
+
             req.getResponseHeaders().set("Vary", "Origin");
         }
 
@@ -74,7 +98,7 @@ public class ProdutosHandler implements HttpHandler {
         String metodo = req.getRequestMethod();
         String caminho = req.getRequestURI().getPath();
 
-        // Responde às requisições de pré-verificação CORS.
+        // Responde à verificação CORS do navegador
         if ("OPTIONS".equals(metodo)) {
             req.sendResponseHeaders(204, -1);
             req.close();
@@ -83,36 +107,68 @@ public class ProdutosHandler implements HttpHandler {
 
         try {
 
-            // ROTA: listar categorias.
+            // AUTENTICAÇÃO DO USUÁRIO
+
+            // Confere o token no MongoDB
+            Document usuario = sessaoService.autenticar(req);
+
+            if (usuario == null) {
+
+                responder(
+                    req, 401,
+                    "Sessao invalida ou expirada. Faca login novamente."
+                );
+                return;
+            }
+
+            // Identifica o usuário autenticado
+            ObjectId usuarioId = usuario.getObjectId("_id");
+
+            if (usuarioId == null) {
+                responder(req, 401, "Usuario nao autenticado.");
+                return;
+            }
+
+            // LISTAR CATEGORIAS
+
             if (caminho.equals("/api/categorias")) {
 
-                if (metodo.equals("GET")) {
+                if ("GET".equals(metodo)) {
+
                     responderJSON(
-                        req, 200, service.listarCategorias()
+                        req, 200,
+                        service.listarCategorias(usuarioId)
                     );
+
                 } else {
                     responder(req, 405, "Metodo nao permitido.");
                 }
                 return;
             }
 
-            // ROTAS: listar e cadastrar produtos.
+            // LISTAR E CADASTRAR PRODUTOS
+
             if (caminho.equals("/api/produtos")) {
 
                 switch (metodo) {
 
                     case "GET":
+
                         responderJSON(
-                            req, 200, service.listarProdutos()
+                            req, 200,
+                            service.listarProdutos(usuarioId)
                         );
                         break;
 
                     case "POST":
+
                         Document cadastro = lerDados(req);
 
                         responderJSON(
                             req, 201,
-                            service.cadastrarProduto(cadastro)
+                            service.cadastrarProduto(
+                                cadastro, usuarioId
+                            )
                         );
                         break;
 
@@ -122,7 +178,8 @@ public class ProdutosHandler implements HttpHandler {
                 return;
             }
 
-            // ROTAS: operações com um produto específico.
+            // ROTAS COM ID DO PRODUTO
+
             if (caminho.startsWith("/api/produtos/")) {
 
                 String restante = caminho.substring(
@@ -131,34 +188,38 @@ public class ProdutosHandler implements HttpHandler {
 
                 String[] partes = restante.split("/", -1);
 
-                // Valida o ID recebido na URL.
-                if (partes.length < 1 ||
+                // Verifica se o ID informado é válido
+                if (
+                    partes.length < 1 ||
                     partes.length > 2 ||
-                    !ObjectId.isValid(partes[0])) {
-
+                    !ObjectId.isValid(partes[0])
+                ) {
                     responder(req, 400, "ID do produto invalido.");
                     return;
                 }
 
                 ObjectId id = new ObjectId(partes[0]);
 
-                // /api/produtos/{id}
+                // BUSCAR, EDITAR E EXCLUIR PRODUTO
+
                 if (partes.length == 1) {
 
                     switch (metodo) {
 
                         case "GET":
+
                             responderJSON(
                                 req, 200,
-                                service.buscarProduto(id)
+                                service.buscarProduto(id, usuarioId)
                             );
                             break;
 
                         case "PUT":
+
                             Document alteracoes = lerDados(req);
 
                             service.atualizarProduto(
-                                id, alteracoes
+                                id, alteracoes, usuarioId
                             );
 
                             responder(
@@ -168,7 +229,8 @@ public class ProdutosHandler implements HttpHandler {
                             break;
 
                         case "DELETE":
-                            service.excluirProduto(id);
+
+                            service.excluirProduto(id, usuarioId);
 
                             responder(
                                 req, 200,
@@ -177,33 +239,36 @@ public class ProdutosHandler implements HttpHandler {
                             break;
 
                         default:
-                            responder(
-                                req, 405,
-                                "Metodo nao permitido."
-                            );
+                            responder(req, 405, "Metodo nao permitido.");
                     }
                     return;
                 }
 
-                // Verifica se o produto pode ser excluído.
-                if (partes[1].equals("exclusao") &&
-                    metodo.equals("GET")) {
+                // VERIFICAR EXCLUSÃO
+
+                if (
+                    partes[1].equals("exclusao") &&
+                    metodo.equals("GET")
+                ) {
 
                     responderJSON(
                         req, 200,
-                        service.verificarExclusao(id)
+                        service.verificarExclusao(id, usuarioId)
                     );
                     return;
                 }
 
-                // Altera o status do produto.
-                if (partes[1].equals("status") &&
-                    metodo.equals("PATCH")) {
+                // ALTERAR STATUS
+
+                if (
+                    partes[1].equals("status") &&
+                    metodo.equals("PATCH")
+                ) {
 
                     Document dados = lerDados(req);
 
                     String mensagem = service.alterarStatus(
-                        id, dados
+                        id, dados, usuarioId
                     );
 
                     responder(req, 200, mensagem);
@@ -211,14 +276,19 @@ public class ProdutosHandler implements HttpHandler {
                 }
             }
 
-            // Rota não encontrada.
+            // ROTA NÃO ENCONTRADA
+
             responder(req, 404, "Rota nao encontrada.");
 
-        } catch (ProdutosService.ProdutoNaoEncontradoException erro) {
+        } catch (
+            ProdutosService.ProdutoNaoEncontradoException erro
+        ) {
 
             responder(req, 404, erro.getMessage());
 
-        } catch (ProdutosService.ConflitoExclusaoException erro) {
+        } catch (
+            ProdutosService.ConflitoExclusaoException erro
+        ) {
 
             responderJSON(
                 req, 409,
@@ -245,20 +315,19 @@ public class ProdutosHandler implements HttpHandler {
                 "Erro interno: " + erro.getMessage()
             );
 
-            responder(
-                req, 500, "Erro interno do servidor."
-            );
+            responder(req, 500, "Erro interno do servidor.");
         }
     }
 
-    // Lê o JSON recebido do frontend.
+    // LEITURA DOS DADOS
+
+    // Recebe e converte o JSON enviado pelo frontend
     private Document lerDados(HttpExchange req)
         throws IOException {
 
         byte[] conteudo = req.getRequestBody()
             .readNBytes(8193);
 
-        // Limita o tamanho do JSON recebido.
         if (conteudo.length > 8192) {
             throw new IllegalArgumentException(
                 "Dados muito grandes."
@@ -272,13 +341,13 @@ public class ProdutosHandler implements HttpHandler {
                 )
             );
         } catch (RuntimeException erro) {
-            throw new IllegalArgumentException(
-                "JSON invalido."
-            );
+            throw new IllegalArgumentException("JSON invalido.");
         }
     }
 
-    // Envia uma mensagem ao frontend em formato JSON.
+    // RESPOSTAS HTTP
+
+    // Retorna uma mensagem ao frontend
     private static void responder(
         HttpExchange req,
         int status,
@@ -286,12 +355,11 @@ public class ProdutosHandler implements HttpHandler {
     ) throws IOException {
 
         responderJSON(
-            req, status,
-            new Document("mensagem", mensagem)
+            req, status, new Document("mensagem", mensagem)
         );
     }
 
-    // Envia documentos JSON ao frontend.
+    // Envia a resposta em formato JSON
     private static void responderJSON(
         HttpExchange req,
         int status,
@@ -306,9 +374,7 @@ public class ProdutosHandler implements HttpHandler {
             "application/json; charset=UTF-8"
         );
 
-        req.sendResponseHeaders(
-            status, resposta.length
-        );
+        req.sendResponseHeaders(status, resposta.length);
 
         try (OutputStream saida = req.getResponseBody()) {
             saida.write(resposta);

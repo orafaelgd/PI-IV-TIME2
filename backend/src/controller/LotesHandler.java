@@ -1,3 +1,4 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
 
 package controller;
 
@@ -13,6 +14,7 @@ import org.bson.Document;
 import org.bson.types.ObjectId;
 
 import service.LotesService;
+import service.SessaoService;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -21,10 +23,13 @@ import java.util.Set;
 
 public class LotesHandler implements HttpHandler {
 
-    // Service responsável pelas operações dos lotes
-    private final LotesService service;
+    // SERVIÇOS
 
-    // Origens autorizadas a acessar a API
+    private final LotesService service;
+    private final SessaoService sessaoService;
+
+    // ORIGENS PERMITIDAS
+
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
@@ -32,33 +37,40 @@ public class LotesHandler implements HttpHandler {
 
     // CONSTRUTOR
 
-    // Recebe as coleções do MongoDB e cria o Service
+    // Recebe as coleções e cria os Services
     public LotesHandler(
         MongoCollection<Document> lotes,
         MongoCollection<Document> itens,
-        MongoCollection<Document> movimentacoes
+        MongoCollection<Document> movimentacoes,
+        MongoCollection<Document> usuarios,
+        MongoCollection<Document> sessoes
     ) {
+
         this.service = new LotesService(
             lotes, itens, movimentacoes
         );
+
+        this.sessaoService = new SessaoService(
+            usuarios, sessoes
+        );
     }
 
-    // ROTAS HTTP
+    // REQUISIÇÕES HTTP
 
-    // Recebe as requisições enviadas pelo frontend
     @Override
     public void handle(HttpExchange req) throws IOException {
 
         String origem = req.getRequestHeaders()
             .getFirst("Origin");
 
-        // Verifica se a origem tem permissão de acesso
+        // Bloqueia origens não permitidas
         if (origem != null && !ORIGENS.contains(origem)) {
             responder(req, 403, "Origem nao permitida.");
             return;
         }
 
-        // Configura as permissões de acesso da API
+        // CONFIGURAÇÃO DE CORS
+
         if (origem != null) {
 
             req.getResponseHeaders().set(
@@ -66,7 +78,8 @@ public class LotesHandler implements HttpHandler {
             );
 
             req.getResponseHeaders().set(
-                "Access-Control-Allow-Headers", "Content-Type"
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization"
             );
 
             req.getResponseHeaders().set(
@@ -74,7 +87,9 @@ public class LotesHandler implements HttpHandler {
                 "GET, POST, PUT, PATCH, DELETE, OPTIONS"
             );
 
-            req.getResponseHeaders().set("Vary", "Origin");
+            req.getResponseHeaders().set(
+                "Vary", "Origin"
+            );
         }
 
         req.getResponseHeaders().set(
@@ -84,14 +99,37 @@ public class LotesHandler implements HttpHandler {
         String metodo = req.getRequestMethod();
         String caminho = req.getRequestURI().getPath();
 
-        // Responde à verificação de CORS
-        if (metodo.equals("OPTIONS")) {
+        // REQUISIÇÃO OPTIONS
+
+        if ("OPTIONS".equals(metodo)) {
             req.sendResponseHeaders(204, -1);
             req.close();
             return;
         }
 
         try {
+
+            // AUTENTICAÇÃO DO USUÁRIO
+
+            // Consulta a sessão no MongoDB
+            Document usuario = sessaoService.autenticar(req);
+
+            if (
+                usuario == null ||
+                usuario.getObjectId("_id") == null
+            ) {
+
+                responder(
+                    req, 401,
+                    "Sessao invalida ou expirada. Faca login novamente."
+                );
+
+                return;
+            }
+
+            // Obtém o ID do usuário autenticado
+            ObjectId usuarioId =
+                usuario.getObjectId("_id");
 
             // LISTAR E CADASTRAR LOTES
 
@@ -100,23 +138,30 @@ public class LotesHandler implements HttpHandler {
                 switch (metodo) {
 
                     case "GET":
+
                         responderJSON(
-                            req, 200, service.listarLotes()
+                            req, 200,
+                            service.listarLotes(usuarioId)
                         );
                         break;
 
                     case "POST":
+
                         Document cadastro = lerDados(req);
 
                         responderJSON(
                             req, 201,
-                            service.cadastrarLote(cadastro)
+                            service.cadastrarLote(
+                                cadastro, usuarioId
+                            )
                         );
                         break;
 
                     default:
+
                         responder(
-                            req, 405, "Metodo nao permitido."
+                            req, 405,
+                            "Metodo nao permitido."
                         );
                 }
 
@@ -133,36 +178,46 @@ public class LotesHandler implements HttpHandler {
 
                 String[] partes = restante.split("/", -1);
 
-                // Valida o ID informado na URL
+                // Valida o ID recebido
                 if (
                     partes.length < 1 ||
                     partes.length > 2 ||
                     !ObjectId.isValid(partes[0])
                 ) {
+
                     responder(
-                        req, 400, "ID do lote invalido."
+                        req, 400,
+                        "ID do lote invalido."
                     );
+
                     return;
                 }
 
                 ObjectId id = new ObjectId(partes[0]);
 
-                // BUSCAR, ATUALIZAR E EXCLUIR LOTE
+                // BUSCAR, EDITAR E EXCLUIR LOTE
 
                 if (partes.length == 1) {
 
                     switch (metodo) {
 
                         case "GET":
+
                             responderJSON(
-                                req, 200, service.buscarLote(id)
+                                req, 200,
+                                service.buscarLote(
+                                    id, usuarioId
+                                )
                             );
                             break;
 
                         case "PUT":
+
                             Document alteracoes = lerDados(req);
 
-                            service.atualizarLote(id, alteracoes);
+                            service.atualizarLote(
+                                id, alteracoes, usuarioId
+                            );
 
                             responder(
                                 req, 200,
@@ -171,7 +226,10 @@ public class LotesHandler implements HttpHandler {
                             break;
 
                         case "DELETE":
-                            service.excluirLote(id);
+
+                            service.excluirLote(
+                                id, usuarioId
+                            );
 
                             responder(
                                 req, 200,
@@ -180,6 +238,7 @@ public class LotesHandler implements HttpHandler {
                             break;
 
                         default:
+
                             responder(
                                 req, 405,
                                 "Metodo nao permitido."
@@ -195,38 +254,52 @@ public class LotesHandler implements HttpHandler {
                     partes[1].equals("exclusao") &&
                     metodo.equals("GET")
                 ) {
+
                     responderJSON(
                         req, 200,
-                        service.verificarExclusao(id)
+                        service.verificarExclusao(
+                            id, usuarioId
+                        )
                     );
+
                     return;
                 }
 
-                // INATIVAR OU REATIVAR LOTE
+                // ALTERAR STATUS
 
                 if (
                     partes[1].equals("status") &&
                     metodo.equals("PATCH")
                 ) {
+
                     Document dados = lerDados(req);
 
                     String mensagem = service.alterarStatus(
-                        id, dados
+                        id, dados, usuarioId
                     );
 
                     responder(req, 200, mensagem);
+
                     return;
                 }
             }
 
-            // Retorna erro quando a rota não existe
-            responder(req, 404, "Rota nao encontrada.");
+            // ROTA NÃO ENCONTRADA
 
-        } catch (LotesService.LoteNaoEncontradoException erro) {
+            responder(
+                req, 404,
+                "Rota nao encontrada."
+            );
+
+        } catch (
+            LotesService.LoteNaoEncontradoException erro
+        ) {
 
             responder(req, 404, erro.getMessage());
 
-        } catch (LotesService.ConflitoLoteException erro) {
+        } catch (
+            LotesService.ConflitoLoteException erro
+        ) {
 
             responderJSON(
                 req, 409, erro.getResposta()
@@ -243,16 +316,21 @@ public class LotesHandler implements HttpHandler {
                 erro.getError().getCategory() ==
                 ErrorCategory.DUPLICATE_KEY
             ) {
+
                 responder(
-                    req, 409, "Codigo de lote ja cadastrado."
+                    req, 409,
+                    "Codigo de lote ja cadastrado."
                 );
+
             } else {
+
                 System.err.println(
                     "Erro ao salvar lote: " + erro.getMessage()
                 );
 
                 responder(
-                    req, 500, "Erro ao salvar no MongoDB."
+                    req, 500,
+                    "Erro ao salvar no MongoDB."
                 );
             }
 
@@ -263,7 +341,8 @@ public class LotesHandler implements HttpHandler {
             );
 
             responder(
-                req, 500, "Erro ao acessar o banco de dados."
+                req, 500,
+                "Erro ao acessar o banco de dados."
             );
 
         } catch (RuntimeException erro) {
@@ -273,21 +352,21 @@ public class LotesHandler implements HttpHandler {
             );
 
             responder(
-                req, 500, "Erro interno do servidor."
+                req, 500,
+                "Erro interno do servidor."
             );
         }
     }
 
     // LEITURA DOS DADOS
 
-    // Lê o JSON enviado pelo frontend
+    // Converte o JSON recebido do frontend
     private Document lerDados(HttpExchange req)
         throws IOException {
 
         byte[] conteudo = req.getRequestBody()
             .readNBytes(8193);
 
-        // Limita o tamanho dos dados recebidos
         if (conteudo.length > 8192) {
             throw new IllegalArgumentException(
                 "Dados enviados sao muito grandes."
@@ -295,12 +374,15 @@ public class LotesHandler implements HttpHandler {
         }
 
         try {
+
             return Document.parse(
                 new String(
                     conteudo, StandardCharsets.UTF_8
                 )
             );
+
         } catch (RuntimeException erro) {
+
             throw new IllegalArgumentException(
                 "JSON invalido."
             );
@@ -309,7 +391,7 @@ public class LotesHandler implements HttpHandler {
 
     // RESPOSTAS HTTP
 
-    // Retorna uma mensagem em formato JSON
+    // Envia uma mensagem JSON ao frontend
     private static void responder(
         HttpExchange req,
         int status,
@@ -317,11 +399,13 @@ public class LotesHandler implements HttpHandler {
     ) throws IOException {
 
         responderJSON(
-            req, status, new Document("mensagem", mensagem)
+            req,
+            status,
+            new Document("mensagem", mensagem)
         );
     }
 
-    // Envia os dados e o código HTTP ao frontend
+    // Envia os dados da resposta
     private static void responderJSON(
         HttpExchange req,
         int status,

@@ -1,7 +1,13 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
 
 document.addEventListener("DOMContentLoaded", () => {
 
+    // CONFIGURAÇÕES
+
     const API = "http://localhost:8080/api";
+    const PAGINA_LOGIN = "login-usuario.html";
+
+    // ELEMENTOS DO FORMULÁRIO
 
     const formulario = document.getElementById("formCadastroLote");
 
@@ -18,12 +24,62 @@ document.addEventListener("DOMContentLoaded", () => {
     const botaoCancelar = document.getElementById("botaoCancelar");
     const mensagem = document.getElementById("mensagemFormulario");
 
+    // IDENTIFICAR EDIÇÃO
+
     const parametros = new URLSearchParams(window.location.search);
     const loteId = parametros.get("id");
-
     const editando = Boolean(loteId);
 
     let carregado = !editando;
+    let enviando = false;
+
+    // AUTENTICAÇÃO
+
+    // Recupera o token do login
+    function obterToken() {
+        return sessionStorage.getItem("token");
+    }
+
+    // Remove os dados da sessão e retorna ao login
+    function encerrarAcesso() {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+        window.location.replace(PAGINA_LOGIN);
+    }
+
+    // Envia o token para a API
+    async function requisicaoAutenticada(url, opcoes = {}) {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+            encerrarAcesso();
+            throw new Error("Sessão não encontrada.");
+        }
+
+        const headers = new Headers(opcoes.headers || {});
+        headers.set("Authorization", `Bearer ${token}`);
+
+        const resposta = await fetch(url, {
+            ...opcoes,
+            headers,
+            cache: "no-store"
+        });
+
+        // Sessão inválida ou expirada
+        if (resposta.status === 401) {
+            encerrarAcesso();
+            throw new Error("Sessão expirada. Faça login novamente.");
+        }
+
+        if (resposta.status === 403) {
+            throw new Error("Você não tem permissão para esta operação.");
+        }
+
+        return resposta;
+    }
+
+    // MENSAGENS
 
     function mostrarErro(texto) {
         mensagem.textContent = texto;
@@ -34,6 +90,8 @@ document.addEventListener("DOMContentLoaded", () => {
         mensagem.textContent = "";
         mensagem.classList.add("hidden");
     }
+
+    // RESPOSTAS DO BACKEND
 
     async function lerResposta(resposta) {
 
@@ -58,6 +116,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // CARREGAR PRODUTOS
+
+    // Busca somente os produtos do usuário autenticado
     async function carregarProdutos() {
 
         campoProduto.disabled = true;
@@ -68,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
         carregando.textContent = "Carregando produtos...";
         campoProduto.appendChild(carregando);
 
-        const resposta = await fetch(`${API}/produtos`);
+        const resposta = await requisicaoAutenticada(`${API}/produtos`);
         const dados = await lerResposta(resposta);
 
         if (!Array.isArray(dados.produtos)) {
@@ -82,12 +142,18 @@ document.addEventListener("DOMContentLoaded", () => {
         inicial.textContent = "Selecione um produto cadastrado";
         campoProduto.appendChild(inicial);
 
-        dados.produtos.forEach(produto => {
+        // Adiciona os produtos da conta na lista
+        dados.produtos.forEach((produto) => {
 
-            if (!produto.id || !produto.nome) return;
+            if (!produto.id || !produto.nome) {
+                return;
+            }
 
-            // Produtos inativos não podem receber lotes novos.
-            if (!editando && produto.status === "inativo") return;
+            // Produtos inativos não recebem lotes novos
+            // Na edição, preserva a opção já vinculada
+            if (!editando && produto.status === "inativo") {
+                return;
+            }
 
             const opcao = document.createElement("option");
             opcao.value = produto.id;
@@ -99,6 +165,9 @@ document.addEventListener("DOMContentLoaded", () => {
         campoProduto.disabled = false;
     }
 
+    // CALCULAR CUSTO TOTAL
+
+    // Multiplica a quantidade pelo valor unitário
     function calcularCustoTotal() {
 
         const quantidade = Number(campoQuantidade.value);
@@ -127,7 +196,8 @@ document.addEventListener("DOMContentLoaded", () => {
         campoCustoTotal.value = "";
     });
 
-    // ADAPTA O FORMULÁRIO
+    // CONFIGURAR EDIÇÃO
+
     if (editando) {
 
         document.title =
@@ -143,16 +213,18 @@ document.addEventListener("DOMContentLoaded", () => {
         botaoSalvar.disabled = true;
     }
 
-    // CARREGAR O LOTE PARA EDIÇÃO
+    // CARREGAR LOTE PARA EDIÇÃO
+
     async function carregarLote() {
 
-        const resposta = await fetch(
+        const resposta = await requisicaoAutenticada(
             `${API}/lotes/${encodeURIComponent(loteId)}`
         );
 
         const dados = await lerResposta(resposta);
         const lote = dados.lote || dados;
 
+        // Preenche os dados do lote
         campoProduto.value = lote.itemId || "";
 
         if (!campoProduto.value) {
@@ -172,7 +244,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         campoObservacao.value = lote.observacao || "";
 
-        // Recupera valor unitário usando o custo salvo.
+        // Recupera o valor unitário do custo total
         const quantidade = Number(lote.quantidadeInicial);
         const custo = Number(lote.custoTotalAquisicao);
 
@@ -183,7 +255,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         calcularCustoTotal();
 
+        // BLOQUEAR CAMPOS COM MOVIMENTAÇÕES
+
+        // Não permite alterar produto e quantidade
         if (lote.possuiMovimentacoes === true) {
+
             campoProduto.disabled = true;
             campoQuantidade.readOnly = true;
 
@@ -198,23 +274,31 @@ document.addEventListener("DOMContentLoaded", () => {
         botaoSalvar.disabled = false;
     }
 
+    // BOTÃO CANCELAR
+
     botaoCancelar.addEventListener("click", () => {
         window.location.href = "todos-lotes.html";
     });
 
-    // ENVIA CADASTRO OU EDIÇÃO
-    formulario.addEventListener("submit", async evento => {
+    // CADASTRAR OU ATUALIZAR LOTE
+
+    formulario.addEventListener("submit", async (evento) => {
 
         evento.preventDefault();
         limparErro();
+
+        if (enviando) return;
 
         if (!carregado) {
             mostrarErro("O lote ainda não foi carregado.");
             return;
         }
 
-        if (!formulario.reportValidity()) return;
+        if (!formulario.reportValidity()) {
+            return;
+        }
 
+        // Monta os dados enviados ao backend
         const lote = {
             itemId: campoProduto.value,
             codigo: campoCodigo.value.trim(),
@@ -237,6 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        enviando = true;
         botaoSalvar.disabled = true;
         botaoSalvar.textContent =
             editando ? "Salvando..." : "Cadastrando...";
@@ -247,7 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? `${API}/lotes/${encodeURIComponent(loteId)}`
                 : `${API}/lotes`;
 
-            const resposta = await fetch(url, {
+            const resposta = await requisicaoAutenticada(url, {
                 method: editando ? "PUT" : "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -273,20 +358,32 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
         } catch (erro) {
-            console.error(erro);
+
+            console.error("Erro ao salvar lote:", erro);
             mostrarErro(erro.message);
 
         } finally {
+
+            enviando = false;
             botaoSalvar.disabled = false;
+
             botaoSalvar.textContent = editando
                 ? "Salvar alterações"
                 : "Cadastrar novo lote";
         }
     });
 
-    // INICIALIZAÇÃO
+    // INICIALIZAR TELA
+
     async function iniciar() {
+
+        if (!obterToken()) {
+            encerrarAcesso();
+            return;
+        }
+
         try {
+
             await carregarProdutos();
 
             if (editando) {
@@ -294,12 +391,12 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
         } catch (erro) {
-            console.error(erro);
+
+            console.error("Erro ao carregar lote:", erro);
             mostrarErro(erro.message);
             botaoSalvar.disabled = true;
         }
     }
 
     iniciar();
-
 });

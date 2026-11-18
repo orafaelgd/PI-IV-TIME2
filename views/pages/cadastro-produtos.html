@@ -1,29 +1,168 @@
+<!-- Código feito por Livia Carvalho Lucizano RA: 25017514 -->
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
 
     <title>Cadastrar Produto | Sistema de Gestão e Redução de Desperdício</title>
 
+    <!-- ESTILIZAÇÃO -->
     <link rel="stylesheet" href="../../public/css/style.css">
+
+    <style>
+        /* CAMPOS COM SUGESTÕES */
+
+        .campo-com-lista {
+            position: relative;
+            width: 100%;
+        }
+
+        .campo-com-lista input {
+            padding-right: 36px;
+        }
+
+        /* SETINHAS PADRONIZADAS */
+
+        .botao-lista {
+            position: absolute;
+            top: 0;
+            right: 0;
+
+            display: flex;
+            width: 36px;
+            height: 28px;
+
+            align-items: center;
+            justify-content: center;
+
+            border: none;
+            background: transparent;
+            color: #243547;
+
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .botao-lista svg {
+            width: 14px;
+            height: 14px;
+            stroke-width: 2.5;
+            pointer-events: none;
+        }
+
+        .botao-lista:hover {
+            background-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .botao-lista:focus-visible {
+            outline: 2px solid #174F54;
+            outline-offset: -2px;
+            border-radius: 4px;
+        }
+
+        /* SETINHAS DOS SELECTS */
+
+        /* Remove as setas nativas de Unidade e Status */
+        #unidadeMedida,
+        #status {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+
+            padding-right: 36px;
+
+            /* Utiliza o mesmo desenho das outras setinhas */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23243547' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+            background-repeat: no-repeat;
+            background-position: right 11px center;
+            background-size: 14px 14px;
+        }
+
+        /* LISTAS DE SUGESTÕES */
+
+        .lista-sugestoes {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+
+            z-index: 50;
+            max-height: 180px;
+            overflow-y: auto;
+
+            border: 1px solid #b4bdc8;
+            border-radius: 5px;
+
+            background-color: white;
+            box-shadow: 0 5px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        .lista-sugestoes[hidden] {
+            display: none;
+        }
+
+        /* OPÇÕES DAS LISTAS */
+
+        .opcao-sugestao {
+            display: block;
+            width: 100%;
+            padding: 10px 12px;
+
+            border: none;
+            background: white;
+
+            color: #243547;
+            font-size: 12px;
+            text-align: left;
+
+            cursor: pointer;
+        }
+
+        .opcao-sugestao:hover,
+        .opcao-sugestao:focus-visible,
+        .opcao-sugestao.ativa {
+            background-color: #e9ebee;
+            outline: none;
+        }
+
+        /* MENSAGEM DE LISTA VAZIA */
+
+        .lista-vazia {
+            padding: 10px 12px;
+            color: #6b7280;
+            font-size: 11px;
+        }
+    </style>
 </head>
 
 <body class="flex min-h-screen bg-background">
 
-    <aside id="aside-placeholder" class="w-[180px] shrink-0"></aside>
+    <!-- MENU LATERAL -->
+    <aside id="aside-placeholder"
+        class="w-[180px] shrink-0"></aside>
 
+    <!-- CONTEÚDO PRINCIPAL -->
     <div class="flex min-w-0 flex-1 flex-col">
 
+        <!-- CABEÇALHO -->
         <div id="header-placeholder"></div>
 
         <main class="flex-1">
+
             <div class="w-full px-6 pt-8">
 
-                <!-- CAMINHO -->
+                <!-- CAMINHO DA PÁGINA -->
                 <div class="mb-8 flex min-h-[35px] items-center text-base">
-                    <span class="text-text-secondary">Produtos</span>
+
+                    <span class="text-text-secondary">
+                        Produtos
+                    </span>
 
                     <span id="caminhoPagina"
                         class="ml-1 font-semibold text-text">
@@ -31,7 +170,7 @@
                     </span>
                 </div>
 
-                <!-- CARD -->
+                <!-- CARD DE CADASTRO -->
                 <section class="w-full rounded-md bg-white px-6 py-5">
 
                     <h1 id="tituloFormulario"
@@ -43,47 +182,123 @@
                     <form id="formCadastroProduto"
                         class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
 
-                        <!-- NOME -->
+                        <!-- NOME DO PRODUTO -->
                         <div class="flex flex-col">
+
                             <label for="nomeProduto"
                                 class="mb-2 text-xs font-medium text-text">
                                 Nome do produto
                                 <span class="text-red-600">*</span>
                             </label>
 
-                            <input
-                                type="text"
-                                id="nomeProduto"
-                                name="nomeProduto"
-                                placeholder="Ex.: Leite Integral"
-                                required
-                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+                            <div id="grupoNomeProduto"
+                                class="campo-com-lista">
+
+                                <!-- CAMPO PARA DIGITAR O NOME -->
+                                <input
+                                    type="text"
+                                    id="nomeProduto"
+                                    name="nomeProduto"
+                                    placeholder="Ex.: Leite Integral"
+                                    autocomplete="off"
+                                    maxlength="150"
+                                    required
+                                    role="combobox"
+                                    aria-autocomplete="list"
+                                    aria-expanded="false"
+                                    aria-controls="listaNomesProdutos"
+                                    class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+
+                                <!-- SETINHA DO NOME -->
+                                <button
+                                    id="setaNomeProduto"
+                                    type="button"
+                                    class="botao-lista"
+                                    aria-label="Mostrar nomes dos produtos"
+                                    aria-controls="listaNomesProdutos"
+                                    aria-expanded="false">
+
+                                    <svg viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2.5"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        aria-hidden="true">
+                                        <path d="m6 9 6 6 6-6"/>
+                                    </svg>
+                                </button>
+
+                                <!-- LISTA DE NOMES CADASTRADOS -->
+                                <div id="listaNomesProdutos"
+                                    class="lista-sugestoes"
+                                    role="listbox"
+                                    aria-label="Nomes de produtos cadastrados"
+                                    hidden>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- CATEGORIA -->
                         <div class="flex flex-col">
+
                             <label for="categoria"
                                 class="mb-2 text-xs font-medium text-text">
                                 Categoria
                                 <span class="text-red-600">*</span>
                             </label>
 
-                            <input
-                                type="text"
-                                id="categoria"
-                                name="categoria"
-                                list="listaCategorias"
-                                placeholder="Digite ou selecione uma categoria"
-                                autocomplete="off"
-                                maxlength="100"
-                                required
-                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+                            <div id="grupoCategoria"
+                                class="campo-com-lista">
 
-                            <datalist id="listaCategorias"></datalist>
+                                <!-- CAMPO PARA DIGITAR A CATEGORIA -->
+                                <input
+                                    type="text"
+                                    id="categoria"
+                                    name="categoria"
+                                    placeholder="Digite ou selecione uma categoria"
+                                    autocomplete="off"
+                                    maxlength="100"
+                                    required
+                                    role="combobox"
+                                    aria-autocomplete="list"
+                                    aria-expanded="false"
+                                    aria-controls="listaCategorias"
+                                    class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
+
+                                <!-- SETINHA DA CATEGORIA -->
+                                <button
+                                    id="setaCategoria"
+                                    type="button"
+                                    class="botao-lista"
+                                    aria-label="Mostrar categorias"
+                                    aria-controls="listaCategorias"
+                                    aria-expanded="false">
+
+                                    <svg viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2.5"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        aria-hidden="true">
+                                        <path d="m6 9 6 6 6-6"/>
+                                    </svg>
+                                </button>
+
+                                <!-- LISTA DE CATEGORIAS CADASTRADAS -->
+                                <div id="listaCategorias"
+                                    class="lista-sugestoes"
+                                    role="listbox"
+                                    aria-label="Categorias cadastradas"
+                                    hidden>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- UNIDADE -->
+                        <!-- QUANTIDADE E UNIDADE DE MEDIDA -->
                         <div class="flex flex-col">
+
                             <label for="quantidadeUnidade"
                                 class="mb-2 text-xs font-medium text-text">
                                 Unidade de Medida
@@ -92,6 +307,7 @@
 
                             <div class="flex gap-2">
 
+                                <!-- QUANTIDADE -->
                                 <input
                                     type="number"
                                     id="quantidadeUnidade"
@@ -102,24 +318,43 @@
                                     required
                                     class="h-[28px] w-[120px] rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
 
+                                <!-- UNIDADE -->
                                 <select
                                     id="unidadeMedida"
                                     name="unidadeMedida"
                                     required
                                     class="h-[28px] flex-1 rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
 
-                                    <option value="">Selecione a Unidade</option>
-                                    <option value="kg">Quilograma (kg)</option>
-                                    <option value="g">Grama (g)</option>
-                                    <option value="l">Litro (L)</option>
-                                    <option value="ml">Mililitro (ml)</option>
-                                    <option value="un">Unidade (un)</option>
+                                    <option value="">
+                                        Selecione a Unidade
+                                    </option>
+
+                                    <option value="kg">
+                                        Quilograma (kg)
+                                    </option>
+
+                                    <option value="g">
+                                        Grama (g)
+                                    </option>
+
+                                    <option value="l">
+                                        Litro (L)
+                                    </option>
+
+                                    <option value="ml">
+                                        Mililitro (ml)
+                                    </option>
+
+                                    <option value="un">
+                                        Unidade (un)
+                                    </option>
                                 </select>
                             </div>
                         </div>
 
-                        <!-- STATUS -->
+                        <!-- STATUS DO PRODUTO -->
                         <div class="flex flex-col">
+
                             <label for="status"
                                 class="mb-2 text-xs font-medium text-text">
                                 Status
@@ -132,35 +367,43 @@
                                 required
                                 class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none">
 
-                                <option value="ativo">Ativo</option>
-                                <option value="inativo">Inativo</option>
+                                <option value="ativo">
+                                    Ativo
+                                </option>
+
+                                <option value="inativo">
+                                    Inativo
+                                </option>
                             </select>
                         </div>
 
                         <!-- OBSERVAÇÃO -->
                         <div class="mt-4 flex flex-col md:col-span-2">
+
                             <label for="observacao"
                                 class="mb-2 text-xs font-medium text-text">
                                 Observação
                                 <span class="text-red-600">*</span>
                             </label>
 
+                            <!-- Espaçamento para alinhar o texto -->
                             <textarea
                                 id="observacao"
                                 name="observacao"
                                 placeholder="Informações adicionais do produto"
                                 required
-                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 text-[11px] text-text outline-none"></textarea>
+                                class="h-[28px] w-full rounded border border-gray-400 bg-[#e9ebee] px-3 py-[6px] text-[11px] leading-[14px] text-text outline-none"></textarea>
                         </div>
 
-                        <!-- ERRO -->
+                        <!-- MENSAGENS DE ERRO -->
                         <p id="mensagemFormulario"
                             class="hidden text-xs text-red-600 md:col-span-2"
                             role="alert"></p>
 
-                        <!-- BOTÕES -->
+                        <!-- BOTÕES DO FORMULÁRIO -->
                         <div class="mt-7 flex justify-end gap-3 md:col-span-2">
 
+                            <!-- BOTÃO CANCELAR -->
                             <button
                                 id="botaoCancelar"
                                 type="button"
@@ -168,6 +411,7 @@
                                 Cancelar
                             </button>
 
+                            <!-- BOTÃO CADASTRAR OU SALVAR -->
                             <button
                                 id="botaoSalvar"
                                 type="submit"
@@ -181,10 +425,15 @@
             </div>
         </main>
 
+        <!-- RODAPÉ -->
         <div id="footer-placeholder"></div>
     </div>
 
+    <!-- CARREGAMENTO DOS COMPONENTES -->
     <script src="../../public/js/load-partials.js"></script>
+
+    <!-- CADASTRO, EDIÇÃO E AUTENTICAÇÃO -->
     <script src="../../public/js/cadastro-produtos.js"></script>
+
 </body>
 </html>
