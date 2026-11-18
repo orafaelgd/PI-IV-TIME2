@@ -1,8 +1,5 @@
 // Código feito por Lucas David de Sousa RA: 25895152
 
-// CÓDIGO ORIGINAL DO PERFIL: LUCAS DAVID DE SOUSA
-// INTEGRAÇÃO COM A AUTENTICAÇÃO POR USUÁRIO
-
 document.addEventListener("DOMContentLoaded", () => {
 
     // CONFIGURAÇÕES
