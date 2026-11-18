@@ -1,6 +1,15 @@
+// Código feito por Livia Carvalho Lucizano RA: 25017514
+
 document.addEventListener("DOMContentLoaded", () => {
 
+    // CONFIGURAÇÕES
+
     const API = "http://localhost:8080/api";
+
+    // Página de login
+    const PAGINA_LOGIN = "login-usuario.html";
+
+    // ELEMENTOS DA TELA
 
     const tabela =
         document.getElementById("tabelaProdutos");
@@ -25,7 +34,84 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let acaoModal = null;
 
-    // ENGRENAGEM
+    // VERIFICAÇÃO DE SESSÃO
+
+    // Recupera o token salvo após o login
+    function obterToken() {
+        return sessionStorage.getItem("token");
+    }
+
+    // Remove os dados da sessão e retorna ao login
+    function encerrarAcesso() {
+
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("usuario");
+
+        window.location.replace(PAGINA_LOGIN);
+    }
+
+    // Verifica se existe um token no navegador
+    function verificarSessao() {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+            encerrarAcesso();
+            return false;
+        }
+
+        return true;
+    }
+
+    // REQUISIÇÕES AUTENTICADAS
+
+    // Envia o token para validação no backend
+    async function requisicaoAutenticada(url, opcoes = {}) {
+
+        const token = obterToken();
+
+        if (!token || !token.trim()) {
+            encerrarAcesso();
+            throw new Error("Sessão não encontrada.");
+        }
+
+        // Adiciona o token ao cabeçalho
+        const headers = new Headers(opcoes.headers || {});
+
+        headers.set(
+            "Authorization",
+            `Bearer ${token}`
+        );
+
+        const resposta = await fetch(url, {
+            ...opcoes,
+            headers,
+            cache: "no-store"
+        });
+
+        // Sessão inválida ou expirada
+        if (resposta.status === 401) {
+
+            encerrarAcesso();
+
+            throw new Error(
+                "Sua sessão expirou. Faça login novamente."
+            );
+        }
+
+        // Usuário sem permissão
+        if (resposta.status === 403) {
+
+            throw new Error(
+                "Você não tem permissão para realizar esta operação."
+            );
+        }
+
+        return resposta;
+    }
+
+    // ÍCONE DE EDIÇÃO
+
     const iconeEngrenagem = `
         <svg xmlns="http://www.w3.org/2000/svg"
             width="22" height="22"
@@ -39,11 +125,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
             <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/>
 
-            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.84 2.84-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1.06 1.56V21h-4v-.04A1.7 1.7 0 0 0 8.88 19.4 1.7 1.7 0 0 0 7 19.74l-.06.06L4.1 16.96l.06-.06A1.7 1.7 0 0 0 4.5 15a1.7 1.7 0 0 0-1.56-1.06H2.9v-4h.04A1.7 1.7 0 0 0 4.5 8.88 1.7 1.7 0 0 0 4.16 7l-.06-.06L6.94 4.1l.06.06A1.7 1.7 0 0 0 8.88 4.5a1.7 1.7 0 0 0 1.06-1.56V2.9h4v.04A1.7 1.7 0 0 0 15 4.5a1.7 1.7 0 0 0 1.87-.34l.06-.06 2.84 2.84-.06.06A1.7 1.7 0 0 0 19.4 8.88a1.7 1.7 0 0 0 1.56 1.06H21v4h-.04A1.7 1.7 0 0 0 19.4 15Z"/>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.84 2.84-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1.06 1.56V21h-4v-.04A1.7 1.7 0 0 0 8.88 19.4 1.7 1.7 0 0 0 7 19.74l-.06.06L4.1 16.96l.06-.06A1.7 1.7 0 0 0 4.5 15a1.7 1.7 0 0 0-1.56-1.06H2.9v-4h.04A1.7 1.7 0 0 0 4.5 8.88a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.94 4.1l.06.06A1.7 1.7 0 0 0 8.88 4.5a1.7 1.7 0 0 0 1.06-1.56V2.9h4v.04A1.7 1.7 0 0 0 15 4.5a1.7 1.7 0 0 0 1.87-.34l.06-.06 2.84 2.84-.06.06A1.7 1.7 0 0 0 19.4 8.88a1.7 1.7 0 0 0 1.56 1.06H21v4h-.04A1.7 1.7 0 0 0 19.4 15Z"/>
         </svg>
     `;
 
-    // LIXEIRA
+    // ÍCONE DE EXCLUSÃO
+
     const iconeLixeira = `
         <svg xmlns="http://www.w3.org/2000/svg"
             width="22" height="22"
@@ -59,14 +146,18 @@ document.addEventListener("DOMContentLoaded", () => {
         </svg>
     `;
 
+    // MENSAGENS DE ERRO
+
+    // Exibe erros na tela
     function mostrarErro(texto) {
 
         mensagemErro.textContent = texto;
-
         mensagemErro.classList.remove("hidden");
     }
 
-    // Lê respostas do backend.
+    // LEITURA DAS RESPOSTAS
+
+    // Converte as respostas do backend para JSON
     async function lerResposta(resposta) {
 
         const texto = await resposta.text();
@@ -74,6 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let dados = {};
 
         if (texto) {
+
             try {
                 dados = JSON.parse(texto);
             } catch {
@@ -82,6 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!resposta.ok) {
+
             throw new Error(
                 dados.mensagem ||
                 dados.erro ||
@@ -92,7 +185,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return dados;
     }
 
-    // Identifica o produto pelo ID do MongoDB.
+    // IDENTIFICAR PRODUTO
+
+    // Recupera o ID do produto no MongoDB
     function obterId(produto) {
 
         const id =
@@ -111,6 +206,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return null;
     }
 
+    // FORMATAR TEXTOS
+
+    // Converte os valores para texto
     function valorTexto(valor, alternativa = "-") {
 
         if (
@@ -122,6 +220,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (typeof valor === "object") {
+
             return valor.nome ||
                 valor.$numberDecimal ||
                 alternativa;
@@ -130,7 +229,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return String(valor);
     }
 
-    // Formata validade.
+    // FORMATAR DATA
+
+    // Converte a validade para o formato brasileiro
     function formatarData(valor) {
 
         if (!valor) return "-";
@@ -154,7 +255,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return texto;
     }
 
-    // Formata valores monetários.
+    // FORMATAR PREÇO
+
+    // Converte o preço para reais
     function formatarPreco(valor) {
 
         if (
@@ -179,6 +282,9 @@ document.addEventListener("DOMContentLoaded", () => {
             : "-";
     }
 
+    // CRIAR CÉLULAS DA TABELA
+
+    // Adiciona uma célula com o texto informado
     function criarCelula(linha, texto, classeExtra = "") {
 
         const celula = document.createElement("td");
@@ -192,17 +298,20 @@ document.addEventListener("DOMContentLoaded", () => {
         return celula;
     }
 
-    // Fecha a janela de confirmação.
+    // FECHAR MODAL
+
+    // Fecha a janela de confirmação
     function fecharModal() {
 
         modal.classList.add("hidden");
-
         modal.classList.remove("flex");
 
         acaoModal = null;
     }
 
-    // Abre a janela de confirmação.
+    // ABRIR MODAL
+
+    // Abre a janela de confirmação
     function abrirModal(titulo, texto, botao, acao) {
 
         modalTitulo.textContent = titulo;
@@ -216,14 +325,20 @@ document.addEventListener("DOMContentLoaded", () => {
         acaoModal = acao;
 
         modal.classList.remove("hidden");
-
         modal.classList.add("flex");
 
         modalCancelar.focus();
     }
 
-    modalCancelar.addEventListener("click", fecharModal);
+    // EVENTOS DO MODAL
 
+    // Fecha ao clicar no botão cancelar
+    modalCancelar.addEventListener(
+        "click",
+        fecharModal
+    );
+
+    // Fecha ao clicar fora da janela
     modal.addEventListener("click", (evento) => {
 
         if (evento.target === modal) {
@@ -231,6 +346,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Fecha ao pressionar Escape
     document.addEventListener("keydown", (evento) => {
 
         if (
@@ -241,7 +357,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Executa a ação somente após confirmação.
+    // CONFIRMAR AÇÃO
+
+    // Executa a operação após a confirmação
     modalConfirmar.addEventListener("click", async () => {
 
         if (!acaoModal) return;
@@ -256,6 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             fecharModal();
 
+            // Atualiza a lista após a operação
             await carregarProdutos();
 
         } catch (erro) {
@@ -270,24 +389,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Verifica no backend se o produto pode ser excluído.
+    // VERIFICAR EXCLUSÃO
+
+    // Consulta se o produto pode ser excluído
     async function conferirExclusao(id) {
 
         mensagemErro.classList.add("hidden");
 
         try {
 
-            const resposta = await fetch(
+            // Envia o token para verificar a exclusão
+            const resposta = await requisicaoAutenticada(
                 `${API}/produtos/${encodeURIComponent(id)}/exclusao`
             );
 
             const dados = await lerResposta(resposta);
 
-            // Produto sem movimentações ou vínculos.
+            // PRODUTO SEM LOTES OU MOVIMENTAÇÕES
+
             if (dados.podeExcluir === true) {
 
                 abrirModal(
-
                     "Excluir produto",
 
                     "Tem certeza de que deseja excluir este produto? Esta ação não poderá ser desfeita.",
@@ -296,7 +418,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     async () => {
 
-                        const resposta = await fetch(
+                        // Exclui o produto da conta autenticada
+                        const resposta = await requisicaoAutenticada(
                             `${API}/produtos/${encodeURIComponent(id)}`,
                             {
                                 method: "DELETE"
@@ -314,18 +437,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } else {
 
-                // Produto possui movimentações ou vínculos.
-                abrirModal(
+                // PRODUTO COM LOTES OU MOVIMENTAÇÕES
 
+                // Oferece a opção de tornar o produto inativo
+                abrirModal(
                     "Não é possível excluir o produto",
 
-                    "Este produto não pode ser excluído, pois possui movimentações registradas ou vínculos com lotes. Deseja torná-lo inativo?",
+                    dados.mensagem ||
+                    "Este produto possui lotes ou movimentações registradas. Deseja torná-lo inativo?",
 
                     "Tornar inativo",
 
                     async () => {
 
-                        const resposta = await fetch(
+                        // Altera o status do produto
+                        const resposta = await requisicaoAutenticada(
                             `${API}/produtos/${encodeURIComponent(id)}/status`,
                             {
                                 method: "PATCH",
@@ -358,13 +484,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Cria botões com os ícones originais.
+    // CRIAR BOTÕES
+
+    // Cria os botões com os ícones originais
     function criarBotao(acao, titulo, icone) {
 
         const botao = document.createElement("button");
 
         botao.type = "button";
-
         botao.title = titulo;
 
         botao.setAttribute("aria-label", titulo);
@@ -379,7 +506,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return botao;
     }
 
-    // Carrega todos os produtos do MongoDB.
+    // CARREGAR PRODUTOS
+
+    // Busca somente produtos da conta autenticada
     async function carregarProdutos() {
 
         mensagemErro.classList.add("hidden");
@@ -397,7 +526,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
 
-            const resposta = await fetch(`${API}/produtos`);
+            // Envia o token para identificar a conta
+            const resposta = await requisicaoAutenticada(
+                `${API}/produtos`
+            );
 
             const dados = await lerResposta(resposta);
 
@@ -406,11 +538,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 : dados.produtos || dados.itens || [];
 
             if (!Array.isArray(produtos)) {
-                throw new Error("Formato inválido da lista de produtos.");
+
+                throw new Error(
+                    "Formato inválido da lista de produtos."
+                );
             }
 
             tabela.replaceChildren();
 
+            // LISTA VAZIA
+
+            // Exibe uma mensagem quando não existem produtos
             if (produtos.length === 0) {
 
                 const linha = document.createElement("tr");
@@ -428,6 +566,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
+            // MONTAR LISTAGEM
+
+            // Cria uma linha para cada produto retornado
             produtos.forEach((produto) => {
 
                 const id = obterId(produto);
@@ -437,7 +578,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 linha.className =
                     "border-b border-gray-300 bg-[#e9ebee]";
 
-                // Nome
+                // NOME DO PRODUTO
+
                 criarCelula(
                     linha,
                     valorTexto(
@@ -447,13 +589,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     )
                 );
 
-                // Categoria
+                // CATEGORIA
+
                 criarCelula(
                     linha,
                     valorTexto(produto.categoria)
                 );
 
-                // Unidade de medida
+                // UNIDADE DE MEDIDA
+
                 const unidade = `
                     ${valorTexto(produto.quantidadeUnidade, "")}
                     ${valorTexto(produto.unidadeMedida, "")}
@@ -464,7 +608,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     unidade || "-"
                 );
 
-                // Quantidade disponível
+                // QUANTIDADE TOTAL
+
                 criarCelula(
                     linha,
                     `${valorTexto(
@@ -475,7 +620,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     )} un.`
                 );
 
-                // Preço unitário
+                // PREÇO UNITÁRIO
+
                 criarCelula(
                     linha,
                     formatarPreco(
@@ -484,7 +630,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     )
                 );
 
-                // Validade
+                // DATA DE VALIDADE
+
                 criarCelula(
                     linha,
                     formatarData(
@@ -493,7 +640,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     )
                 );
 
-                // Status
+                // STATUS DO PRODUTO
+
                 const status = valorTexto(
                     produto.status,
                     "ativo"
@@ -505,7 +653,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     status.slice(1)
                 );
 
-                // AÇÕES
+                // BOTÕES DE AÇÃO
+
                 const acoes = document.createElement("td");
 
                 acoes.className = "px-3 py-3";
@@ -515,10 +664,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 grupo.className =
                     "flex items-center justify-center gap-2";
 
-                // BOTÃO ENGRENAGEM
-                const editar = criarBotao(
+                // BOTÃO EDITAR
 
+                const editar = criarBotao(
                     () => {
+
                         window.location.href =
                             `cadastro-produtos.html?id=${encodeURIComponent(id)}`;
                     },
@@ -528,9 +678,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     iconeEngrenagem
                 );
 
-                // BOTÃO LIXEIRA
-                const excluir = criarBotao(
+                // BOTÃO EXCLUIR
 
+                const excluir = criarBotao(
                     () => conferirExclusao(id),
 
                     "Excluir produto",
@@ -538,10 +688,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     iconeLixeira
                 );
 
+                // Desativa os botões quando o ID não existe
                 if (!id) {
 
                     editar.disabled = true;
-
                     excluir.disabled = true;
 
                     editar.title =
@@ -558,7 +708,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 linha.appendChild(acoes);
 
                 tabela.appendChild(linha);
-
             });
 
         } catch (erro) {
@@ -571,6 +720,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // INICIALIZAR TELA
+
+    // Impede carregar produtos quando não existe token
+    if (!verificarSessao()) {
+        return;
+    }
+
+    // Carrega os produtos da conta autenticada
     carregarProdutos();
 
 });
