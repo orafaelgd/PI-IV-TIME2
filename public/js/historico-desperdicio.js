@@ -1,5 +1,6 @@
 
-// HISTÓRICO DE DESPERDÍCIO
+// HISTÓRICO DE SAÍDA
+// AUTENTICAÇÃO, PAGINAÇÃO, MOTIVOS E PESQUISA
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -7,6 +8,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const API_URL = "http://localhost:8080";
     const PAGINA_LOGIN = "login-usuario.html";
+
+    // MOTIVOS DISPONÍVEIS
+
+    const MOTIVOS_VALIDOS = [
+        "Todos",
+        "Consumido",
+        "Vencimento",
+        "Contaminado",
+        "Danificado",
+        "Outro"
+    ];
 
     // ELEMENTOS DA TELA
 
@@ -18,10 +30,33 @@ document.addEventListener("DOMContentLoaded", () => {
         "mensagemErroHistorico"
     );
 
-    if (!tabela) {
+    const campoPesquisa = document.getElementById(
+        "pesquisaProduto"
+    );
+
+    const botoesMotivo =
+        document.querySelectorAll("[data-motivo]");
+
+    // VARIÁVEIS
+
+    let registrosCarregados = [];
+
+    let motivoSelecionado = "Todos";
+
+    let carregandoHistorico = false;
+    let erroCarregamento = false;
+
+    // VALIDAR ELEMENTOS
+
+    if (
+        !tabela ||
+        !mensagemErro ||
+        !campoPesquisa ||
+        botoesMotivo.length === 0
+    ) {
 
         console.error(
-            "Tabela do histórico não encontrada."
+            "Elementos da tela de histórico não encontrados."
         );
 
         return;
@@ -34,7 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return sessionStorage.getItem("token");
     }
 
-    // ENCERRAR ACESSO
+    // ENCERRAR SESSÃO
 
     function encerrarAcesso() {
 
@@ -59,7 +94,8 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         }
 
-        // Envia o token da conta logada
+        // ENVIAR TOKEN DO USUÁRIO LOGADO
+
         const resposta = await fetch(url, {
 
             method: "GET",
@@ -95,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return resposta;
     }
 
-    // LER RESPOSTA
+    // LER RESPOSTA DA API
 
     async function lerResposta(resposta) {
 
@@ -121,6 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             throw new Error(
                 dados.mensagem ||
+                dados.erro ||
                 `Erro HTTP ${resposta.status}`
             );
         }
@@ -132,15 +169,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function formatarData(data) {
 
-        if (!data) return "-";
+        if (!data) {
+            return "-";
+        }
 
-        // Data somente com ano, mês e dia
-        if (/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+        // DATA SOMENTE COM ANO, MÊS E DIA
+
+        if (
+            typeof data === "string" &&
+            /^\d{4}-\d{2}-\d{2}$/.test(data)
+        ) {
 
             const [ano, mes, dia] = data.split("-");
 
             return `${dia}/${mes}/${ano}`;
         }
+
+        // DATA COMPLETA
 
         const dataConvertida = new Date(data);
 
@@ -177,11 +222,13 @@ document.addEventListener("DOMContentLoaded", () => {
             return "-";
         }
 
-        // Aceita Decimal128 do MongoDB
+        // COMPATIBILIDADE COM DECIMAL128
+
         if (
             typeof quantidade === "object" &&
             "$numberDecimal" in quantidade
         ) {
+
             quantidade = quantidade.$numberDecimal;
         }
 
@@ -201,11 +248,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${valor} ${unidade || ""}`.trim();
     }
 
-    // EXIBIR MENSAGEM DE ERRO
+    // MOSTRAR ERRO
 
     function mostrarErro(texto) {
-
-        if (!mensagemErro) return;
 
         mensagemErro.textContent = texto;
 
@@ -215,8 +260,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // LIMPAR ERRO
 
     function limparErro() {
-
-        if (!mensagemErro) return;
 
         mensagemErro.textContent = "";
 
@@ -264,98 +307,250 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.appendChild(linha);
     }
 
-    // PREENCHER TABELA
+    // CRIAR LINHA DO HISTÓRICO
 
-    function preencherTabela(registros) {
+    function criarLinha(registro) {
+
+        const linha = document.createElement("tr");
+
+        // PADRÃO VISUAL DAS OUTRAS TELAS
+
+        linha.className =
+            "border-b border-gray-300 bg-[#e9ebee] text-text";
+
+        // RESPONSÁVEL
+
+        const responsavel =
+            registro.origem === "AUTOMATICA"
+                ? "Sistema"
+                : registro.responsavelNome ||
+                  "Não informado";
+
+        // PRODUTO
+
+        criarCelula(
+            linha,
+            registro.produtoNome ||
+            "Produto não identificado"
+        );
+
+        // QUANTIDADE DE SAÍDA
+
+        criarCelula(
+            linha,
+            formatarQuantidade(
+                registro.quantidade,
+                registro.unidade
+            ),
+            true
+        );
+
+        // MOTIVO
+
+        criarCelula(
+            linha,
+            registro.motivo || "-",
+            true
+        );
+
+        // DATA
+
+        criarCelula(
+            linha,
+            formatarData(
+                registro.dataOcorrencia
+            ),
+            true
+        );
+
+        // REGISTRADO POR
+
+        criarCelula(
+            linha,
+            responsavel,
+            true
+        );
+
+        return linha;
+    }
+
+    // NORMALIZAR TEXTO
+
+    // IGNORAR ACENTOS E LETRAS MAIÚSCULAS
+
+    function normalizarTexto(texto) {
+
+        return String(texto || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
+    }
+
+    // SELECIONAR FILTRO DE MOTIVO
+
+    function selecionarFiltro(botaoAtivo) {
+
+        // ATUALIZAR VISUAL DE TODOS OS BOTÕES
+
+        botoesMotivo.forEach((botao) => {
+
+            botao.classList.remove(
+                "bg-primary-dark",
+                "text-white"
+            );
+
+            botao.classList.add(
+                "bg-[#e9ebee]",
+                "text-text"
+            );
+
+            botao.setAttribute(
+                "aria-pressed",
+                "false"
+            );
+        });
+
+        // DESTACAR BOTÃO SELECIONADO
+
+        botaoAtivo.classList.remove(
+            "bg-[#e9ebee]",
+            "text-text"
+        );
+
+        botaoAtivo.classList.add(
+            "bg-primary-dark",
+            "text-white"
+        );
+
+        botaoAtivo.setAttribute(
+            "aria-pressed",
+            "true"
+        );
+    }
+
+    // FILTRAR HISTÓRICO
+
+    function filtrarHistorico() {
+
+        // NÃO MODIFICAR RESULTADOS DURANTE CARREGAMENTO
+
+        if (
+            carregandoHistorico ||
+            erroCarregamento
+        ) {
+            return;
+        }
+
+        // PESQUISA PELO NOME DO PRODUTO
+
+        const pesquisa = normalizarTexto(
+            campoPesquisa.value
+        );
+
+        // APLICAR FILTRO DE NOME E MOTIVO
+
+        const registrosFiltrados =
+            registrosCarregados.filter((registro) => {
+
+                const nomeProduto = normalizarTexto(
+                    registro.produtoNome
+                );
+
+                const motivoRegistro = normalizarTexto(
+                    registro.motivo
+                );
+
+                const correspondeNome =
+                    nomeProduto.includes(pesquisa);
+
+                const correspondeMotivo =
+                    motivoSelecionado === "Todos" ||
+                    motivoRegistro === normalizarTexto(
+                        motivoSelecionado
+                    );
+
+                return (
+                    correspondeNome &&
+                    correspondeMotivo
+                );
+            });
+
+        // LIMPAR TABELA
 
         tabela.replaceChildren();
 
-        // NENHUM REGISTRO
+        // NENHUM RESULTADO
 
-        if (
-            !Array.isArray(registros) ||
-            registros.length === 0
-        ) {
+        if (registrosFiltrados.length === 0) {
 
             mostrarMensagem(
-                "Nenhum desperdício encontrado."
+                pesquisa || motivoSelecionado !== "Todos"
+                    ? "Nenhuma saída encontrada para os filtros selecionados."
+                    : "Nenhuma saída registrada."
             );
 
             return;
         }
 
-        // CRIAR LINHAS
+        // PREENCHER TABELA
 
-        registros.forEach((registro) => {
+        const fragmento =
+            document.createDocumentFragment();
 
-            const linha = document.createElement("tr");
+        registrosFiltrados.forEach((registro) => {
 
-            // Mantém o padrão visual já definido
-            linha.className =
-                "border-b border-gray-300 bg-[#e9ebee] text-text";
-
-            // RESPONSÁVEL
-
-            const responsavel =
-                registro.origem === "AUTOMATICA"
-                    ? "Sistema"
-                    : registro.responsavelNome ||
-                      "Não informado";
-
-            // PRODUTO
-
-            criarCelula(
-                linha,
-                registro.produtoNome ||
-                "Produto não identificado"
+            fragmento.appendChild(
+                criarLinha(registro)
             );
-
-            // QUANTIDADE
-
-            criarCelula(
-                linha,
-                formatarQuantidade(
-                    registro.quantidade,
-                    registro.unidade
-                ),
-                true
-            );
-
-            // MOTIVO
-
-            criarCelula(
-                linha,
-                registro.motivo || "-",
-                true
-            );
-
-            // DATA
-
-            criarCelula(
-                linha,
-                formatarData(
-                    registro.dataOcorrencia
-                ),
-                true
-            );
-
-            // REGISTRADO POR
-
-            criarCelula(
-                linha,
-                responsavel,
-                true
-            );
-
-            tabela.appendChild(linha);
         });
+
+        tabela.appendChild(fragmento);
     }
 
-    // CARREGAR HISTÓRICO DO MONGODB
+    // PESQUISAR ENQUANTO DIGITA
+
+    campoPesquisa.addEventListener(
+        "input",
+        filtrarHistorico
+    );
+
+    // EVENTOS DOS FILTROS DE MOTIVO
+
+    botoesMotivo.forEach((botao) => {
+
+        botao.addEventListener("click", () => {
+
+            const motivo = botao.dataset.motivo;
+
+            // VALIDAR MOTIVO SELECIONADO
+
+            if (!MOTIVOS_VALIDOS.includes(motivo)) {
+                return;
+            }
+
+            // ATUALIZAR MOTIVO E APARÊNCIA
+
+            motivoSelecionado = motivo;
+
+            selecionarFiltro(botao);
+
+            // APLICAR PESQUISA E MOTIVO JUNTOS
+
+            filtrarHistorico();
+        });
+    });
+
+    // CARREGAR TODAS AS SAÍDAS
 
     async function carregarHistorico() {
 
         limparErro();
+
+        carregandoHistorico = true;
+        erroCarregamento = false;
+
+        registrosCarregados = [];
 
         mostrarMensagem(
             "Carregando histórico..."
@@ -368,7 +563,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let pagina = 1;
             let total = 0;
 
-            // CONSULTAR TODAS AS PÁGINAS
+            // CONSULTAR TODAS AS PÁGINAS DA API
 
             do {
 
@@ -376,10 +571,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     new URLSearchParams({
                         pagina: String(pagina),
                         limite: "100",
-                        somenteDesperdicio: "true"
+                        somenteDesperdicio: "false"
                     });
 
-                // A API identifica o usuário pelo token
+                // REQUISIÇÃO COM TOKEN
+
                 const resposta =
                     await requisicaoAutenticada(
                         `${API_URL}/api/saidas?${parametros.toString()}`
@@ -407,7 +603,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 total = Number(dados.total);
 
-                // O backend já filtra pela conta
+                // ARMAZENAR TODAS AS SAÍDAS
+
                 registros.push(...itens);
 
                 // VALIDAR PAGINAÇÃO
@@ -426,13 +623,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } while (registros.length < total);
 
-            // MOSTRAR SOMENTE DESPERDÍCIOS
+            // GUARDAR RESULTADOS PARA FILTRAR LOCALMENTE
 
-            const desperdicios = registros.filter(
-                registro => registro.desperdicio === true
-            );
+            registrosCarregados = registros;
 
-            preencherTabela(desperdicios);
+            carregandoHistorico = false;
+
+            // EXIBIR TODOS OU APLICAR FILTROS ATIVOS
+
+            filtrarHistorico();
 
         } catch (erro) {
 
@@ -441,11 +640,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 erro
             );
 
+            registrosCarregados = [];
+            erroCarregamento = true;
+
             mostrarMensagem(
                 "Não foi possível carregar o histórico."
             );
 
             mostrarErro(erro.message);
+
+        } finally {
+
+            carregandoHistorico = false;
         }
     }
 
@@ -457,6 +663,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         return;
     }
+
+    // FILTRO INICIAL: TODOS
+
+    const filtroInicial =
+        document.querySelector(
+            '[data-motivo="Todos"]'
+        );
+
+    if (filtroInicial) {
+        selecionarFiltro(filtroInicial);
+    }
+
+    // CARREGAR HISTÓRICO DA CONTA LOGADA
 
     carregarHistorico();
 });

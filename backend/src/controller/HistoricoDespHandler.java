@@ -61,7 +61,10 @@ public class HistoricoDespHandler implements HttpHandler {
 
         // VALIDAR ORIGEM
 
-        if (origem != null && !ORIGENS.contains(origem)) {
+        if (
+            origem != null &&
+            !ORIGENS.contains(origem)
+        ) {
 
             responder(
                 requisicao,
@@ -72,7 +75,7 @@ public class HistoricoDespHandler implements HttpHandler {
             return;
         }
 
-        // CONFIGURAÇÃO DE CORS
+        // CONFIGURAR CORS
 
         if (origem != null) {
 
@@ -151,13 +154,13 @@ public class HistoricoDespHandler implements HttpHandler {
 
         try {
 
-            // AUTENTICAÇÃO DO USUÁRIO
+            // AUTENTICAR USUÁRIO
 
-            // O SessaoService valida o token e recupera
-            // o usuário real na coleção users.
-            Document usuario = sessaoService.autenticar(
-                requisicao
-            );
+            // O SESSAOSERVICE VALIDA O TOKEN
+            // E RECUPERA A CONTA NA COLEÇÃO USERS
+
+            Document usuario =
+                sessaoService.autenticar(requisicao);
 
             if (
                 usuario == null ||
@@ -173,25 +176,26 @@ public class HistoricoDespHandler implements HttpHandler {
                 return;
             }
 
-            // ID DA CONTA LOGADA
+            // RECUPERAR ID DA CONTA LOGADA
 
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
 
             // LOG DE CONFERÊNCIA
 
-            // Não imprime o token nem informações pessoais.
             System.out.println(
-                "HISTÓRICO - Usuário autenticado: " +
+                "HISTÓRICO DE SAÍDA - Usuário: " +
                 usuarioId.toHexString()
             );
 
-            // LER PARÂMETROS
+            // LER PARÂMETROS DA URL
 
             Map<String, String> parametros =
                 lerParametros(
                     requisicao.getRequestURI().getRawQuery()
                 );
+
+            // FILTROS DE DATA
 
             LocalDate inicio = lerData(
                 parametros.get("dataInicio")
@@ -201,6 +205,8 @@ public class HistoricoDespHandler implements HttpHandler {
                 parametros.get("dataFim")
             );
 
+            // PAGINAÇÃO
+
             int pagina = Integer.parseInt(
                 parametros.getOrDefault("pagina", "1")
             );
@@ -209,10 +215,14 @@ public class HistoricoDespHandler implements HttpHandler {
                 parametros.getOrDefault("limite", "20")
             );
 
+            // PADRÃO: MOSTRAR TODAS AS SAÍDAS
+
             String somenteTexto = parametros.getOrDefault(
                 "somenteDesperdicio",
-                "true"
+                "false"
             );
+
+            // VALIDAR FILTRO DE DESPERDÍCIO
 
             if (
                 !"true".equals(somenteTexto) &&
@@ -224,7 +234,7 @@ public class HistoricoDespHandler implements HttpHandler {
                 );
             }
 
-            // CONSULTAR HISTÓRICO DO USUÁRIO
+            // CONSULTAR SERVICE
 
             Document resultado =
                 historicoService.consultarHistorico(
@@ -237,7 +247,7 @@ public class HistoricoDespHandler implements HttpHandler {
                     usuarioId
                 );
 
-            // RETORNAR RESULTADOS
+            // RETORNAR JSON
 
             responderJSON(
                 requisicao,
@@ -299,6 +309,7 @@ public class HistoricoDespHandler implements HttpHandler {
             String[] par = parte.split("=", 2);
 
             if (par.length != 2) {
+
                 throw new IllegalArgumentException(
                     "Parâmetro inválido."
                 );
@@ -314,8 +325,11 @@ public class HistoricoDespHandler implements HttpHandler {
                 StandardCharsets.UTF_8
             );
 
-            // Não permite parâmetros duplicados.
-            if (parametros.putIfAbsent(nome, valor) != null) {
+            // NÃO PERMITIR PARÂMETROS DUPLICADOS
+
+            if (
+                parametros.putIfAbsent(nome, valor) != null
+            ) {
 
                 throw new IllegalArgumentException(
                     "Parâmetro duplicado."
@@ -377,13 +391,20 @@ public class HistoricoDespHandler implements HttpHandler {
             "application/json; charset=UTF-8"
         );
 
+        requisicao.getResponseHeaders().set(
+            "Cache-Control",
+            "no-store"
+        );
+
         requisicao.sendResponseHeaders(
             status,
             resposta.length
         );
 
-        try (OutputStream saida =
-                requisicao.getResponseBody()) {
+        try (
+            OutputStream saida =
+                requisicao.getResponseBody()
+        ) {
 
             saida.write(resposta);
         }
