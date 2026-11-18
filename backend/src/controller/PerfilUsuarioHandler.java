@@ -11,6 +11,7 @@ import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 
 import org.bson.Document;
+import org.bson.types.ObjectId;
 
 import service.PerfilUsuarioService;
 import service.SessaoService;
@@ -23,15 +24,20 @@ import java.util.Set;
 
 public class PerfilUsuarioHandler implements HttpHandler {
 
+    // ORIGENS PERMITIDAS
+
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
     );
 
+    // SERVIÇOS
+
     private final SessaoService sessaoService;
     private final PerfilUsuarioService perfilUsuarioService;
 
-    // Construtor
+    // CONSTRUTOR
+
     public PerfilUsuarioHandler(
         MongoCollection<Document> usuarios,
         MongoCollection<Document> sessoes
@@ -48,31 +54,28 @@ public class PerfilUsuarioHandler implements HttpHandler {
         );
     }
 
-    @Override
-    public void handle(
-        HttpExchange requisicao
-    ) throws IOException {
+    // REQUISIÇÕES HTTP
 
-        String origem = requisicao
-            .getRequestHeaders()
+    @Override
+    public void handle(HttpExchange requisicao)
+            throws IOException {
+
+        String origem = requisicao.getRequestHeaders()
             .getFirst("Origin");
 
-        // Verificar a origem da requisição
-        if (
-            origem != null &&
-            !ORIGENS.contains(origem)
-        ) {
+        // VERIFICAR ORIGEM
 
+        if (origem != null && !ORIGENS.contains(origem)) {
             responder(
                 requisicao,
                 403,
                 "Origem não permitida."
             );
-
             return;
         }
 
-        // Configurar CORS
+        // CONFIGURAÇÃO DE CORS
+
         if (origem != null) {
 
             requisicao.getResponseHeaders().set(
@@ -87,7 +90,7 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
             requisicao.getResponseHeaders().set(
                 "Access-Control-Allow-Methods",
-                "PATCH, OPTIONS"
+                "GET, PATCH, OPTIONS"
             );
 
             requisicao.getResponseHeaders().set(
@@ -96,42 +99,52 @@ public class PerfilUsuarioHandler implements HttpHandler {
             );
         }
 
+        requisicao.getResponseHeaders().set(
+            "Cache-Control",
+            "no-store"
+        );
+
         String metodo = requisicao.getRequestMethod();
+        String rota = requisicao.getRequestURI().getPath();
 
-        String rota = requisicao
-            .getRequestURI()
-            .getPath();
+        // VALIDAR ROTA
 
-        // Verificar as rotas disponíveis
         if (
             !"/api/perfil".equals(rota) &&
             !"/api/perfil/senha".equals(rota)
         ) {
-
             responder(
                 requisicao,
                 404,
                 "Rota não encontrada."
             );
-
             return;
         }
 
-        // Responder à verificação CORS
-        if ("OPTIONS".equals(metodo)) {
+        // REQUISIÇÃO OPTIONS
 
+        if ("OPTIONS".equals(metodo)) {
             requisicao.sendResponseHeaders(204, -1);
             requisicao.close();
-
             return;
         }
 
-        // Permitir somente PATCH
-        if (!"PATCH".equals(metodo)) {
+        // VALIDAR MÉTODO
+
+        boolean buscarPerfil =
+            "/api/perfil".equals(rota) &&
+            "GET".equals(metodo);
+
+        boolean alterarDados =
+            "PATCH".equals(metodo);
+
+        if (!buscarPerfil && !alterarDados) {
 
             requisicao.getResponseHeaders().set(
                 "Allow",
-                "PATCH, OPTIONS"
+                "/api/perfil".equals(rota)
+                    ? "GET, PATCH, OPTIONS"
+                    : "PATCH, OPTIONS"
             );
 
             responder(
@@ -139,45 +152,86 @@ public class PerfilUsuarioHandler implements HttpHandler {
                 405,
                 "Método não permitido."
             );
-
             return;
         }
 
         try {
 
-            // Identificar o usuário autenticado
-            Document usuario = sessaoService.autenticar(
-                requisicao
-            );
+            // AUTENTICAÇÃO
 
-            if (usuario == null) {
+            // Identifica o usuário pelo token da sessão
+            Document usuario =
+                sessaoService.autenticar(requisicao);
 
+            if (
+                usuario == null ||
+                usuario.getObjectId("_id") == null
+            ) {
                 responder(
                     requisicao,
                     401,
                     "Sessão inválida ou expirada. Faça login novamente."
                 );
-
                 return;
             }
 
-            // Ler o JSON enviado pelo frontend
-            Document dados = lerCorpo(requisicao);
+            ObjectId usuarioId =
+                usuario.getObjectId("_id");
 
-            if (dados == null) {
+            // CONSULTAR PERFIL
 
-                responder(
+            // Não recebe o ID do frontend
+            // O ID é obtido diretamente da sessão
+            if (buscarPerfil) {
+
+                Document perfil = new Document()
+                    .append(
+                        "id",
+                        usuarioId.toHexString()
+                    )
+                    .append(
+                        "nome",
+                        usuario.getString("nome")
+                    )
+                    .append(
+                        "email",
+                        usuario.getString("email")
+                    )
+                    .append(
+                        "celular",
+                        usuario.getString("celular")
+                    )
+                    .append(
+                        "cargo",
+                        usuario.getString("cargo")
+                    );
+
+                responderJSON(
                     requisicao,
-                    400,
-                    "JSON inválido ou maior que 8 KB."
+                    200,
+                    perfil
                 );
 
                 return;
             }
 
+            // LER DADOS ENVIADOS
+
+            Document dados = lerCorpo(requisicao);
+
+            if (dados == null) {
+                responder(
+                    requisicao,
+                    400,
+                    "JSON inválido ou maior que 8 KB."
+                );
+                return;
+            }
+
             Document resposta;
 
-            // Alterar a senha do usuário
+            // ALTERAR SENHA
+
             if ("/api/perfil/senha".equals(rota)) {
 
                 resposta = perfilUsuarioService.alterarSenha(
@@ -187,14 +241,14 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
             } else {
 
-                // Atualizar e-mail ou celular
+                // ALTERAR E-MAIL OU CELULAR
+
                 resposta = perfilUsuarioService.atualizarDados(
                     usuario,
                     dados
                 );
             }
 
-            // Retornar sucesso ao frontend
             responderJSON(
                 requisicao,
                 200,
@@ -203,7 +257,6 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
         } catch (IllegalArgumentException erro) {
 
-            // Dados inválidos
             responder(
                 requisicao,
                 400,
@@ -212,7 +265,6 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
         } catch (NoSuchElementException erro) {
 
-            // Usuário não encontrado
             responder(
                 requisicao,
                 404,
@@ -221,20 +273,18 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
         } catch (MongoWriteException erro) {
 
-            // Verificar e-mail duplicado
+            // E-MAIL DUPLICADO
+
             if (
                 erro.getError().getCategory()
-                == ErrorCategory.DUPLICATE_KEY
+                    == ErrorCategory.DUPLICATE_KEY
             ) {
-
                 responder(
                     requisicao,
                     409,
                     "Este e-mail já está cadastrado."
                 );
-
             } else {
-
                 responder(
                     requisicao,
                     500,
@@ -244,7 +294,11 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
         } catch (MongoException erro) {
 
-            // Erro ao acessar o MongoDB
+            System.err.println(
+                "Erro MongoDB no perfil: " +
+                erro.getMessage()
+            );
+
             responder(
                 requisicao,
                 500,
@@ -253,7 +307,11 @@ public class PerfilUsuarioHandler implements HttpHandler {
 
         } catch (RuntimeException erro) {
 
-            // Erro inesperado
+            System.err.println(
+                "Erro no perfil: " +
+                erro.getMessage()
+            );
+
             responder(
                 requisicao,
                 500,
@@ -262,37 +320,33 @@ public class PerfilUsuarioHandler implements HttpHandler {
         }
     }
 
-    // Ler o corpo da requisição
+    // LER CORPO DA REQUISIÇÃO
+
     private static Document lerCorpo(
         HttpExchange requisicao
     ) throws IOException {
 
-        // Limitar o JSON a 8 KB
-        byte[] conteudo = requisicao
-            .getRequestBody()
+        byte[] conteudo = requisicao.getRequestBody()
             .readNBytes(8193);
 
         if (conteudo.length > 8192) {
             return null;
         }
 
-        // Converter o conteúdo para Document
         try {
-
             return Document.parse(
                 new String(
                     conteudo,
                     StandardCharsets.UTF_8
                 )
             );
-
         } catch (RuntimeException erro) {
-
             return null;
         }
     }
 
-    // Preparar resposta com mensagem
+    // RESPOSTA COM MENSAGEM
+
     private static void responder(
         HttpExchange requisicao,
         int status,
@@ -306,15 +360,15 @@ public class PerfilUsuarioHandler implements HttpHandler {
         );
     }
 
-    // Enviar resposta JSON
+    // ENVIAR RESPOSTA JSON
+
     private static void responderJSON(
         HttpExchange requisicao,
         int status,
         Document dados
     ) throws IOException {
 
-        byte[] resposta = dados
-            .toJson()
+        byte[] resposta = dados.toJson()
             .getBytes(StandardCharsets.UTF_8);
 
         requisicao.getResponseHeaders().set(
@@ -327,10 +381,8 @@ public class PerfilUsuarioHandler implements HttpHandler {
             resposta.length
         );
 
-        try (
-            OutputStream saida =
-                requisicao.getResponseBody()
-        ) {
+        try (OutputStream saida =
+                requisicao.getResponseBody()) {
 
             saida.write(resposta);
         }
