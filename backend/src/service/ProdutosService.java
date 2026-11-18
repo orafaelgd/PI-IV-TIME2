@@ -1,9 +1,7 @@
+package service;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Date;
@@ -12,13 +10,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import com.mongodb.MongoException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
-
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 
 import org.bson.Document;
 import org.bson.types.Decimal128;
@@ -26,19 +20,34 @@ import org.bson.types.ObjectId;
 
 import static com.mongodb.client.model.Filters.*;
 
-public class ProdutosHandler implements HttpHandler {
+public class ProdutosService {
 
+    // Coleções utilizadas no MongoDB.
     private final MongoCollection<Document> itens;
     private final MongoCollection<Document> categorias;
     private final MongoCollection<Document> lotes;
     private final MongoCollection<Document> movimentacoes;
 
-    private static final Set<String> ORIGENS = Set.of(
-        "http://localhost:5500",
-        "http://127.0.0.1:5500"
-    );
+    // Exceção utilizada quando o produto não existe.
+    public static class ProdutoNaoEncontradoException
+        extends RuntimeException {
 
-    public ProdutosHandler(
+        public ProdutoNaoEncontradoException() {
+            super("Produto nao encontrado.");
+        }
+    }
+
+    // Exceção utilizada para impedir exclusões indevidas.
+    public static class ConflitoExclusaoException
+        extends RuntimeException {
+
+        public ConflitoExclusaoException(String mensagem) {
+            super(mensagem);
+        }
+    }
+
+    // Construtor que recebe as coleções do banco.
+    public ProdutosService(
         MongoCollection<Document> itens,
         MongoCollection<Document> categorias,
         MongoCollection<Document> lotes,
@@ -50,164 +59,10 @@ public class ProdutosHandler implements HttpHandler {
         this.movimentacoes = movimentacoes;
     }
 
-    // =====================================================
-    // ROTAS HTTP
-    // =====================================================
-
-    @Override
-    public void handle(HttpExchange req) throws IOException {
-
-        String origem = req.getRequestHeaders().getFirst("Origin");
-
-        if (origem != null && !ORIGENS.contains(origem)) {
-            responder(req, 403, "Origem nao permitida.");
-            return;
-        }
-
-        if (origem != null) {
-            req.getResponseHeaders().set(
-                "Access-Control-Allow-Origin", origem
-            );
-            req.getResponseHeaders().set(
-                "Access-Control-Allow-Headers", "Content-Type"
-            );
-            req.getResponseHeaders().set(
-                "Access-Control-Allow-Methods",
-                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            );
-            req.getResponseHeaders().set("Vary", "Origin");
-        }
-
-        req.getResponseHeaders().set("Cache-Control", "no-store");
-
-        String metodo = req.getRequestMethod();
-        String caminho = req.getRequestURI().getPath();
-
-        if ("OPTIONS".equals(metodo)) {
-            req.sendResponseHeaders(204, -1);
-            req.close();
-            return;
-        }
-
-        try {
-
-            // CATEGORIAS
-            if (caminho.equals("/api/categorias")) {
-
-                if (metodo.equals("GET")) {
-                    listarCategorias(req);
-                } else {
-                    responder(req, 405, "Metodo nao permitido.");
-                }
-                return;
-            }
-
-            // PRODUTOS - LISTAR E CADASTRAR
-            if (caminho.equals("/api/produtos")) {
-
-                switch (metodo) {
-                    case "GET":
-                        listarProdutos(req);
-                        break;
-
-                    case "POST":
-                        cadastrarProduto(req);
-                        break;
-
-                    default:
-                        responder(req, 405, "Metodo nao permitido.");
-                }
-                return;
-            }
-
-            // PRODUTOS COM ID
-            if (caminho.startsWith("/api/produtos/")) {
-
-                String restante = caminho.substring(
-                    "/api/produtos/".length()
-                );
-
-                String[] partes = restante.split("/", -1);
-
-                if (partes.length < 1 ||
-                    partes.length > 2 ||
-                    !ObjectId.isValid(partes[0])) {
-
-                    responder(req, 400, "ID do produto invalido.");
-                    return;
-                }
-
-                ObjectId id = new ObjectId(partes[0]);
-
-                // /api/produtos/{id}
-                if (partes.length == 1) {
-
-                    switch (metodo) {
-                        case "GET":
-                            buscarProduto(req, id);
-                            break;
-
-                        case "PUT":
-                            atualizarProduto(req, id);
-                            break;
-
-                        case "DELETE":
-                            excluirProduto(req, id);
-                            break;
-
-                        default:
-                            responder(req, 405, "Metodo nao permitido.");
-                    }
-                    return;
-                }
-
-                // /api/produtos/{id}/exclusao
-                if (partes[1].equals("exclusao")
-                    && metodo.equals("GET")) {
-
-                    verificarExclusao(req, id);
-                    return;
-                }
-
-                // /api/produtos/{id}/status
-                if (partes[1].equals("status")
-                    && metodo.equals("PATCH")) {
-
-                    alterarStatus(req, id);
-                    return;
-                }
-            }
-
-            responder(req, 404, "Rota nao encontrada.");
-
-        } catch (IllegalArgumentException erro) {
-
-            responder(req, 400, erro.getMessage());
-
-        } catch (MongoException erro) {
-
-            System.err.println(
-                "Erro MongoDB: " + erro.getMessage()
-            );
-
-            responder(req, 500, "Erro ao acessar o banco.");
-
-        } catch (RuntimeException erro) {
-
-            System.err.println(
-                "Erro interno: " + erro.getMessage()
-            );
-
-            responder(req, 500, "Erro interno do servidor.");
-        }
-    }
-
-    // =====================================================
     // CATEGORIAS
-    // =====================================================
 
-    private void listarCategorias(HttpExchange req)
-        throws IOException {
+    // Retorna todas as categorias cadastradas.
+    public Document listarCategorias() {
 
         List<Document> lista = new ArrayList<>();
 
@@ -219,21 +74,19 @@ public class ProdutosHandler implements HttpHandler {
                 continue;
             }
 
-            lista.add(new Document()
-                .append(
-                    "id",
-                    categoria.getObjectId("_id").toHexString()
-                )
-                .append("nome", nome));
+            ObjectId id = categoria.getObjectId("_id");
+
+            lista.add(
+                new Document()
+                    .append("id", id.toHexString())
+                    .append("nome", nome)
+            );
         }
 
-        responderJSON(
-            req,
-            200,
-            new Document("categorias", lista)
-        );
+        return new Document("categorias", lista);
     }
 
+    // Gera um código padronizado para a categoria.
     private static String gerarCodigo(String nome) {
 
         String texto = Normalizer.normalize(
@@ -247,6 +100,7 @@ public class ProdutosHandler implements HttpHandler {
             .replaceAll("^-|-$", "");
     }
 
+    // Busca a categoria ou cadastra uma nova.
     private ObjectId buscarOuCriarCategoria(String nome) {
 
         String codigo = gerarCodigo(nome);
@@ -261,6 +115,7 @@ public class ProdutosHandler implements HttpHandler {
             eq("codigo", codigo)
         ).first();
 
+        // Busca também pelo nome, ignorando maiúsculas.
         if (categoria == null) {
             categoria = categorias.find(
                 regex(
@@ -271,6 +126,7 @@ public class ProdutosHandler implements HttpHandler {
             ).first();
         }
 
+        // Cadastra a categoria se ela ainda não existir.
         if (categoria == null) {
 
             categoria = new Document()
@@ -284,6 +140,7 @@ public class ProdutosHandler implements HttpHandler {
         return categoria.getObjectId("_id");
     }
 
+    // Obtém o nome da categoria vinculada ao produto.
     private String buscarNomeCategoria(Document produto) {
 
         ObjectId categoriaId =
@@ -304,31 +161,9 @@ public class ProdutosHandler implements HttpHandler {
         return categoria.getString("nome");
     }
 
-    // =====================================================
-    // LEITURA E VALIDACAO DE DADOS
-    // =====================================================
+    // VALIDAÇÃO DOS PRODUTOS
 
-    private Document lerDados(HttpExchange req)
-        throws IOException {
-
-        byte[] conteudo = req.getRequestBody()
-            .readNBytes(8193);
-
-        if (conteudo.length > 8192) {
-            throw new IllegalArgumentException(
-                "Dados muito grandes."
-            );
-        }
-
-        try {
-            return Document.parse(
-                new String(conteudo, StandardCharsets.UTF_8)
-            );
-        } catch (RuntimeException erro) {
-            throw new IllegalArgumentException("JSON invalido.");
-        }
-    }
-
+    // Obtém um campo de texto e remove espaços nas pontas.
     private static String obterTexto(
         Document documento,
         String campo
@@ -341,6 +176,7 @@ public class ProdutosHandler implements HttpHandler {
             : "";
     }
 
+    // Valida os dados antes de cadastrar ou atualizar.
     private Document validarProduto(Document dados) {
 
         String nome = obterTexto(
@@ -367,12 +203,14 @@ public class ProdutosHandler implements HttpHandler {
             dados, "observacao"
         );
 
+        // Valida o nome.
         if (nome.isEmpty() || nome.length() > 150) {
             throw new IllegalArgumentException(
                 "Nome do produto invalido."
             );
         }
 
+        // Valida a categoria.
         if (categoria.isEmpty() ||
             categoria.length() > 100) {
 
@@ -381,6 +219,7 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // Converte a quantidade para número.
         BigDecimal quantidade;
 
         try {
@@ -393,6 +232,7 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // A quantidade precisa ser maior que zero.
         if (quantidade.signum() <= 0 ||
             quantidade.compareTo(
                 BigDecimal.valueOf(Double.MAX_VALUE)
@@ -403,6 +243,7 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // Unidades de medida aceitas.
         if (!Set.of("kg", "g", "l", "ml", "un")
             .contains(unidade)) {
 
@@ -411,6 +252,7 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // Status permitido.
         if (!Set.of("ativo", "inativo")
             .contains(status)) {
 
@@ -419,6 +261,7 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // Validação da observação.
         if (observacao.isEmpty() ||
             observacao.length() > 1000) {
 
@@ -427,9 +270,11 @@ public class ProdutosHandler implements HttpHandler {
             );
         }
 
+        // Busca ou cadastra a categoria informada.
         ObjectId categoriaId =
             buscarOuCriarCategoria(categoria);
 
+        // Retorna os dados padronizados para o banco.
         return new Document()
             .append("nome", nome)
             .append("categoriaId", categoriaId)
@@ -442,14 +287,10 @@ public class ProdutosHandler implements HttpHandler {
             .append("observacao", observacao);
     }
 
-    // =====================================================
     // CADASTRAR PRODUTO
-    // =====================================================
 
-    private void cadastrarProduto(HttpExchange req)
-        throws IOException {
-
-        Document dados = lerDados(req);
+    // Valida e cadastra um produto no MongoDB.
+    public Document cadastrarProduto(Document dados) {
 
         Document produto = validarProduto(dados);
 
@@ -457,38 +298,37 @@ public class ProdutosHandler implements HttpHandler {
 
         itens.insertOne(produto);
 
-        responderJSON(
-            req,
-            201,
-            new Document()
-                .append(
-                    "mensagem",
-                    "Produto cadastrado com sucesso!"
-                )
-                .append(
-                    "id",
-                    produto.getObjectId("_id").toHexString()
-                )
-        );
+        return new Document()
+            .append(
+                "mensagem",
+                "Produto cadastrado com sucesso!"
+            )
+            .append(
+                "id",
+                produto.getObjectId("_id").toHexString()
+            );
     }
 
-    // =====================================================
-    // BUSCAR PRODUTO PELO ID - ENGRENAGEM
-    // =====================================================
+    // BUSCAR PRODUTO PELO ID
 
-    private void buscarProduto(
-        HttpExchange req,
-        ObjectId id
-    ) throws IOException {
+    // Busca o produto ou informa que ele não existe.
+    private Document encontrarProduto(ObjectId id) {
 
         Document produto = itens.find(
             eq("_id", id)
         ).first();
 
         if (produto == null) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
+            throw new ProdutoNaoEncontradoException();
         }
+
+        return produto;
+    }
+
+    // Retorna as informações de um produto específico.
+    public Document buscarProduto(ObjectId id) {
+
+        Document produto = encontrarProduto(id);
 
         Document resposta = new Document()
             .append("id", id.toHexString())
@@ -503,8 +343,7 @@ public class ProdutosHandler implements HttpHandler {
             .append(
                 "quantidadeUnidade",
                 obterDecimal(
-                    produto,
-                    "quantidadeUnidade"
+                    produto, "quantidadeUnidade"
                 ).toPlainString()
             )
             .append(
@@ -520,33 +359,21 @@ public class ProdutosHandler implements HttpHandler {
                 produto.getString("observacao")
             );
 
-        responderJSON(
-            req,
-            200,
-            new Document("produto", resposta)
-        );
+        return new Document("produto", resposta);
     }
 
-    // =====================================================
-    // EDITAR PRODUTO - SALVAR ALTERACOES
-    // =====================================================
+    // ATUALIZAR PRODUTO
 
-    private void atualizarProduto(
-        HttpExchange req,
-        ObjectId id
-    ) throws IOException {
+    // Atualiza as informações de um produto existente.
+    public void atualizarProduto(
+        ObjectId id,
+        Document dados
+    ) {
 
-        Document existente = itens.find(
-            eq("_id", id)
-        ).first();
+        // Verifica se o produto existe.
+        encontrarProduto(id);
 
-        if (existente == null) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
-        }
-
-        Document dados = lerDados(req);
-
+        // Valida os novos dados.
         Document alteracoes = validarProduto(dados);
 
         alteracoes.append("atualizadoEm", new Date());
@@ -557,24 +384,16 @@ public class ProdutosHandler implements HttpHandler {
         );
 
         if (resultado.getMatchedCount() == 0) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
+            throw new ProdutoNaoEncontradoException();
         }
-
-        responder(
-            req,
-            200,
-            "Produto atualizado com sucesso!"
-        );
     }
 
-    // =====================================================
-    // VERIFICAR MOVIMENTACOES DE PRODUTOS E LOTES
-    // =====================================================
+    // VERIFICAÇÃO DE LOTES E MOVIMENTAÇÕES
 
+    // Verifica se o produto possui movimentações registradas.
     private boolean possuiMovimentacoes(ObjectId produtoId) {
 
-        // Busca movimentacoes diretamente pelo produto.
+        // Busca movimentações vinculadas diretamente ao produto.
         if (movimentacoes.countDocuments(
             or(
                 eq("itemId", produtoId),
@@ -584,7 +403,7 @@ public class ProdutosHandler implements HttpHandler {
             return true;
         }
 
-        // Busca todos os lotes relacionados ao produto.
+        // Reúne os IDs dos lotes pertencentes ao produto.
         List<ObjectId> idsLotes = new ArrayList<>();
 
         for (Document lote : lotes.find(
@@ -602,12 +421,13 @@ public class ProdutosHandler implements HttpHandler {
             return false;
         }
 
-        // Busca movimentacoes pelos IDs dos lotes.
+        // Verifica movimentações vinculadas aos lotes.
         return movimentacoes.countDocuments(
             in("loteId", idsLotes)
         ) > 0;
     }
 
+    // Verifica se existem lotes vinculados ao produto.
     private boolean possuiLotes(ObjectId produtoId) {
 
         return lotes.countDocuments(
@@ -615,23 +435,12 @@ public class ProdutosHandler implements HttpHandler {
         ) > 0;
     }
 
-    // =====================================================
-    // VERIFICAR SE PODE EXCLUIR - LIXEIRA
-    // =====================================================
+    // VERIFICAR EXCLUSÃO
 
-    private void verificarExclusao(
-        HttpExchange req,
-        ObjectId id
-    ) throws IOException {
+    // Consulta se o produto pode ser excluído.
+    public Document verificarExclusao(ObjectId id) {
 
-        Document produto = itens.find(
-            eq("_id", id)
-        ).first();
-
-        if (produto == null) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
-        }
+        encontrarProduto(id);
 
         boolean temMovimentacoes =
             possuiMovimentacoes(id);
@@ -644,6 +453,7 @@ public class ProdutosHandler implements HttpHandler {
 
         String mensagem;
 
+        // Produtos com histórico não podem ser excluídos.
         if (temMovimentacoes) {
 
             mensagem =
@@ -664,55 +474,31 @@ public class ProdutosHandler implements HttpHandler {
                 "Tem certeza de que deseja excluir este produto?";
         }
 
-        responderJSON(
-            req,
-            200,
-            new Document()
-                .append("podeExcluir", podeExcluir)
-                .append(
-                    "possuiMovimentacoes",
-                    temMovimentacoes
-                )
-                .append("possuiLotes", temLotes)
-                .append("mensagem", mensagem)
-        );
+        return new Document()
+            .append("podeExcluir", podeExcluir)
+            .append(
+                "possuiMovimentacoes",
+                temMovimentacoes
+            )
+            .append("possuiLotes", temLotes)
+            .append("mensagem", mensagem);
     }
 
-    // =====================================================
     // EXCLUIR PRODUTO
-    // =====================================================
 
-    private void excluirProduto(
-        HttpExchange req,
-        ObjectId id
-    ) throws IOException {
+    // Exclui apenas produtos sem lotes ou movimentações.
+    public void excluirProduto(ObjectId id) {
 
-        Document produto = itens.find(
-            eq("_id", id)
-        ).first();
+        encontrarProduto(id);
 
-        if (produto == null) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
-        }
-
-        // Confere novamente antes de excluir.
-        // Impede exclusao de produtos com historico ou lotes.
+        // Confere novamente os vínculos antes de excluir.
         if (possuiMovimentacoes(id) || possuiLotes(id)) {
 
-            responderJSON(
-                req,
-                409,
-                new Document()
-                    .append("podeExcluir", false)
-                    .append(
-                        "mensagem",
-                        "Este produto nao pode ser excluido, " +
-                        "pois possui movimentacoes ou lotes vinculados. " +
-                        "Deseja torna-lo inativo?"
-                    )
+            throw new ConflitoExclusaoException(
+                "Este produto nao pode ser excluido, " +
+                "pois possui movimentacoes ou lotes vinculados. " +
+                "Deseja torna-lo inativo?"
             );
-            return;
         }
 
         DeleteResult resultado = itens.deleteOne(
@@ -720,47 +506,31 @@ public class ProdutosHandler implements HttpHandler {
         );
 
         if (resultado.getDeletedCount() == 0) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
+            throw new ProdutoNaoEncontradoException();
         }
-
-        responder(
-            req,
-            200,
-            "Produto excluido com sucesso!"
-        );
     }
 
-    // =====================================================
-    // ALTERAR STATUS - TORNAR INATIVO
-    // =====================================================
+    // ALTERAR STATUS
 
-    private void alterarStatus(
-        HttpExchange req,
-        ObjectId id
-    ) throws IOException {
+    // Permite ativar ou inativar um produto.
+    public String alterarStatus(
+        ObjectId id,
+        Document dados
+    ) {
 
-        Document produto = itens.find(
-            eq("_id", id)
-        ).first();
-
-        if (produto == null) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
-        }
-
-        Document dados = lerDados(req);
+        encontrarProduto(id);
 
         String status = obterTexto(
-            dados,
-            "status"
+            dados, "status"
         ).toLowerCase(Locale.ROOT);
 
+        // Aceita somente ativo ou inativo.
         if (!Set.of("ativo", "inativo")
             .contains(status)) {
 
-            responder(req, 400, "Status invalido.");
-            return;
+            throw new IllegalArgumentException(
+                "Status invalido."
+            );
         }
 
         UpdateResult resultado = itens.updateOne(
@@ -774,25 +544,18 @@ public class ProdutosHandler implements HttpHandler {
         );
 
         if (resultado.getMatchedCount() == 0) {
-            responder(req, 404, "Produto nao encontrado.");
-            return;
+            throw new ProdutoNaoEncontradoException();
         }
 
-        responder(
-            req,
-            200,
-            status.equals("inativo")
-                ? "Produto inativado com sucesso!"
-                : "Status atualizado com sucesso!"
-        );
+        return status.equals("inativo")
+            ? "Produto inativado com sucesso!"
+            : "Status atualizado com sucesso!";
     }
 
-    // =====================================================
     // LISTAR PRODUTOS
-    // =====================================================
 
-    private void listarProdutos(HttpExchange req)
-        throws IOException {
+    // Lista produtos e calcula as informações do estoque.
+    public Document listarProdutos() {
 
         List<Document> listaProdutos = new ArrayList<>();
 
@@ -818,49 +581,49 @@ public class ProdutosHandler implements HttpHandler {
 
             Date validadeMaisProxima = null;
 
-            // Consulta todos os lotes do produto.
+            // Consulta os lotes pertencentes ao produto.
             for (Document lote : lotes.find(
                 eq("itemId", produtoId)
             )) {
 
                 BigDecimal quantidadeDisponivel =
                     obterDecimal(
-                        lote,
-                        "quantidadeDisponivel"
+                        lote, "quantidadeDisponivel"
                     );
 
                 BigDecimal quantidadeInicial =
                     obterDecimal(
-                        lote,
-                        "quantidadeInicial"
+                        lote, "quantidadeInicial"
                     );
 
                 BigDecimal custoTotal =
                     obterDecimal(
-                        lote,
-                        "custoTotalAquisicao"
+                        lote, "custoTotalAquisicao"
                     );
 
-                // Considera somente estoque disponivel.
+                // Ignora lotes sem estoque disponível.
                 if (quantidadeDisponivel.signum() <= 0) {
                     continue;
                 }
 
+                // Soma a quantidade disponível dos lotes.
                 quantidadeTotal = quantidadeTotal.add(
                     quantidadeDisponivel
                 );
 
-                // PRECO MEDIO PONDERADO
+                // Calcula o custo do estoque pelo preço
+                // de aquisição proporcional de cada lote.
                 if (
                     quantidadeInicial.signum() > 0 &&
                     lote.get("custoTotalAquisicao") != null
                 ) {
 
-                    BigDecimal precoDoLote = custoTotal.divide(
-                        quantidadeInicial,
-                        10,
-                        RoundingMode.HALF_UP
-                    );
+                    BigDecimal precoDoLote =
+                        custoTotal.divide(
+                            quantidadeInicial,
+                            10,
+                            RoundingMode.HALF_UP
+                        );
 
                     custoEstoque = custoEstoque.add(
                         precoDoLote.multiply(
@@ -868,13 +631,16 @@ public class ProdutosHandler implements HttpHandler {
                         )
                     );
 
-                    quantidadeComPreco = quantidadeComPreco.add(
-                        quantidadeDisponivel
-                    );
+                    quantidadeComPreco =
+                        quantidadeComPreco.add(
+                            quantidadeDisponivel
+                        );
                 }
 
-                // VALIDADE MAIS PROXIMA
-                Date validade = lote.getDate("dataValidade");
+                // Identifica a validade mais próxima.
+                Date validade = lote.getDate(
+                    "dataValidade"
+                );
 
                 if (validade != null) {
 
@@ -887,7 +653,7 @@ public class ProdutosHandler implements HttpHandler {
                 }
             }
 
-            // PRECO UNITARIO
+            // Calcula o preço médio ponderado do estoque.
             String precoUnitario = null;
 
             if (quantidadeComPreco.signum() > 0) {
@@ -899,7 +665,7 @@ public class ProdutosHandler implements HttpHandler {
                 ).toPlainString();
             }
 
-            // DATA DE VALIDADE
+            // Converte a data de validade para texto.
             String dataValidade = null;
 
             if (validadeMaisProxima != null) {
@@ -909,7 +675,7 @@ public class ProdutosHandler implements HttpHandler {
                     .toString();
             }
 
-            // DOCUMENTO ENVIADO AO FRONTEND
+            // Monta os dados enviados para a tela.
             Document resultado = new Document()
                 .append(
                     "id",
@@ -955,17 +721,12 @@ public class ProdutosHandler implements HttpHandler {
             listaProdutos.add(resultado);
         }
 
-        responderJSON(
-            req,
-            200,
-            new Document("produtos", listaProdutos)
-        );
+        return new Document("produtos", listaProdutos);
     }
 
-    // =====================================================
-    // CONVERSAO DOS NUMEROS DO MONGODB
-    // =====================================================
+    // CONVERSÃO DOS NÚMEROS DO MONGODB
 
+    // Converte diferentes formatos numéricos em BigDecimal.
     private static BigDecimal obterDecimal(
         Document documento,
         String campo
@@ -973,14 +734,17 @@ public class ProdutosHandler implements HttpHandler {
 
         Object valor = documento.get(campo);
 
+        // Valores armazenados como Decimal128.
         if (valor instanceof Decimal128) {
             return ((Decimal128) valor).bigDecimalValue();
         }
 
+        // Valores numéricos convencionais.
         if (valor instanceof Number) {
             return new BigDecimal(valor.toString());
         }
 
+        // Valores armazenados como texto.
         if (valor instanceof String) {
 
             try {
@@ -991,46 +755,5 @@ public class ProdutosHandler implements HttpHandler {
         }
 
         return BigDecimal.ZERO;
-    }
-
-    // =====================================================
-    // RESPOSTAS HTTP
-    // =====================================================
-
-    private static void responder(
-        HttpExchange req,
-        int status,
-        String mensagem
-    ) throws IOException {
-
-        responderJSON(
-            req,
-            status,
-            new Document("mensagem", mensagem)
-        );
-    }
-
-    private static void responderJSON(
-        HttpExchange req,
-        int status,
-        Document dados
-    ) throws IOException {
-
-        byte[] resposta = dados.toJson()
-            .getBytes(StandardCharsets.UTF_8);
-
-        req.getResponseHeaders().set(
-            "Content-Type",
-            "application/json; charset=UTF-8"
-        );
-
-        req.sendResponseHeaders(
-            status,
-            resposta.length
-        );
-
-        try (OutputStream saida = req.getResponseBody()) {
-            saida.write(resposta);
-        }
     }
 }
