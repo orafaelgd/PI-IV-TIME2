@@ -19,7 +19,6 @@ import service.SessaoService;
 
 import org.bson.Document;
 import org.bson.types.ObjectId;
-import service.SessaoService;
 
 public class ServidorSocket implements Runnable {
 
@@ -47,9 +46,9 @@ public class ServidorSocket implements Runnable {
   }
 
   public ServidorSocket(
-        RepositorioVencimentos repo,
-        SessaoService sessaoServ,
-        int porta) {
+      RepositorioVencimentos repo,
+      SessaoService sessaoServ,
+      int porta) {
 
     this.repositorio = repo;
     this.sessaoService = sessaoServ;

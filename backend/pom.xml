@@ -24,12 +24,19 @@
             <version>5.13.0</version>
         </dependency>
 
-
         <!-- Biblioteca para proteger as senhas -->
         <dependency>
             <groupId>org.mindrot</groupId>
             <artifactId>jbcrypt</artifactId>
             <version>0.4</version>
+        </dependency>
+
+        <!-- JUnit 5 para testes -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.13.4</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>
@@ -39,7 +46,12 @@
         <!-- Mantém a estrutura atual backend/src -->
         <sourceDirectory>src</sourceDirectory>
 
+        <!-- Diretório dos testes JUnit -->
+        <testSourceDirectory>${project.basedir}/servidor/test</testSourceDirectory>
+
         <plugins>
+
+            <!-- Inclui as classes do servidor na compilação -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>build-helper-maven-plugin</artifactId>
@@ -59,11 +71,27 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- Compilação Java 21 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.1</version>
+                <configuration>
+                    <!-- Evita compilar testes como código principal -->
+                    <excludes>
+                        <exclude>test/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
+
+            <!-- Execução dos testes JUnit -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+            </plugin>
+
         </plugins>
 
     </build>
