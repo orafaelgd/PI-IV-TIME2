@@ -345,10 +345,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function buscarProximosVencimentos() {
     try {
-      const resposta = await fetch(`${API_VENCIMENTOS}?dias=7`, {
-        method: "GET",
-        cache: "no-store",
-      });
+      const resposta = await requisicaoAutenticada(`${API_VENCIMENTOS}?dias=7`);
 
       const dados = await lerResposta(resposta);
 

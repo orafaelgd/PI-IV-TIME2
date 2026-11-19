@@ -15,10 +15,17 @@ import helper.JsonVencimentos;
 
 import java.time.ZoneId;
 import java.util.List;
+import service.SessaoService;
+
+import org.bson.Document;
+import org.bson.types.ObjectId;
+import service.SessaoService;
 
 public class ServidorSocket implements Runnable {
 
   private final RepositorioVencimentos repositorio;
+  private final SessaoService sessaoService;
+
   private static final int PORTA = 8081;
 
   @Override
@@ -39,8 +46,9 @@ public class ServidorSocket implements Runnable {
     }
   }
 
-  public ServidorSocket(RepositorioVencimentos repo) {
+  public ServidorSocket(RepositorioVencimentos repo, SessaoService sessaoServ) {
     repositorio = repo;
+    sessaoService = sessaoServ;
   }
 
   private void atenderCliente(Socket cliente) {
@@ -63,14 +71,19 @@ public class ServidorSocket implements Runnable {
       System.out.println("Requisição: " + primeiraLinha);
 
       // Lê os demais cabeçalhos HTTP
+
       String origem = null;
+      String autorizacao = null;
       String linha;
 
       while ((linha = entrada.readLine()) != null && !linha.isEmpty()) {
-        System.out.println(linha);
 
         if (linha.regionMatches(true, 0, "Origin:", 0, 7)) {
           origem = linha.substring(7).trim();
+        }
+
+        if (linha.regionMatches(true, 0, "Authorization:", 0, 14)) {
+          autorizacao = linha.substring(14).trim();
         }
       }
 
@@ -89,13 +102,6 @@ public class ServidorSocket implements Runnable {
       // Remove os parâmetros da URL
       String caminho = recurso.split("\\?", 2)[0];
 
-      // Verifica o método HTTP
-      if (!metodo.equals("GET")) {
-        RespostaHttp.enviar(saida, 405, "Method Not Allowed",
-            "{\"erro\":\"Metodo nao permitido\"}", origem);
-        return;
-      }
-
       // Verifica a rota solicitada
       if (!caminho.equals("/api/lotes/proximos-vencimento")) {
         RespostaHttp.enviar(saida, 404, "Not Found",
@@ -103,12 +109,55 @@ public class ServidorSocket implements Runnable {
         return;
       }
 
+      // Responde à verificação CORS do navegador
+      if (metodo.equals("OPTIONS")) {
+        RespostaHttp.enviar(
+            saida, 200, "OK", "{}", origem);
+        return;
+      }
+
+      // Permite somente GET para consultar os lotes
+      if (!metodo.equals("GET")) {
+        RespostaHttp.enviar(saida, 405, "Method Not Allowed",
+            "{\"erro\":\"Metodo nao permitido\"}", origem);
+        return;
+      }
+
       try {
+
+        String token = SessaoService.extrairToken(autorizacao);
+
+        Document usuario = sessaoService.autenticarToken(token);
+
+        // Rejeita sessões inválidas ou ausentes
+        if (usuario == null) {
+          RespostaHttp.enviar(
+              saida,
+              401,
+              "Unauthorized",
+              "{\"erro\":\"Sessao invalida ou expirada\"}",
+              origem);
+          return;
+        }
+
+        // Identifica o usuário autenticado
+        ObjectId usuarioId = usuario.getObjectId("_id");
+
+        if (usuarioId == null) {
+          RespostaHttp.enviar(
+              saida,
+              401,
+              "Unauthorized",
+              "{\"erro\":\"Usuario invalido\"}",
+              origem);
+          return;
+        }
+
         int dias = ParametroDias.obter(recurso);
 
         LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
 
-        List<LoteProximoVencimento> lotes = repositorio.buscar(dias, hoje);
+        List<LoteProximoVencimento> lotes = repositorio.buscar(dias, hoje, usuarioId);
 
         String json = JsonVencimentos.gerar(lotes, hoje, dias);
 
