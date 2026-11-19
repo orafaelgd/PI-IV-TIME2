@@ -21,19 +21,32 @@ import java.util.Set;
 
 public class MovimentacoesHandler implements HttpHandler {
 
-    // ORIGENS PERMITIDAS
+    // =====================================================
+    // CONFIGURAÇÃO DAS ORIGENS PERMITIDAS
+    // Define os endereços do frontend autorizados
+    // a realizar requisições ao backend.
+    // =====================================================
 
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
     );
 
-    // SERVIÇOS
+    // =====================================================
+    // SERVIÇOS UTILIZADOS PELO CONTROLLER
+    // MovimentacoesService executa as regras de negócio.
+    // SessaoService valida a autenticação do usuário.
+    // =====================================================
 
     private final MovimentacoesService movimentacoesService;
     private final SessaoService sessaoService;
 
+    // =====================================================
     // CONSTRUTOR
+    // Recebe as coleções do MongoDB e inicializa
+    // os serviços responsáveis pelas movimentações
+    // e pelo gerenciamento de sessões.
+    // =====================================================
 
     public MovimentacoesHandler(
         MongoClient cliente,
@@ -52,8 +65,6 @@ public class MovimentacoesHandler implements HttpHandler {
                 produtos
             );
 
-        // MESMO SESSAOSERVICE DAS OUTRAS TELAS
-
         this.sessaoService =
             new SessaoService(
                 usuarios,
@@ -61,13 +72,20 @@ public class MovimentacoesHandler implements HttpHandler {
             );
     }
 
-    // ATENDER REQUISIÇÕES
+    // =====================================================
+    // RECEBIMENTO E VALIDAÇÃO DAS REQUISIÇÕES HTTP
+    // Verifica a origem, configura as permissões de acesso,
+    // valida a rota e permite apenas os métodos
+    // necessários para registrar movimentações.
+    // =====================================================
 
     @Override
     public void handle(HttpExchange requisicao)
             throws IOException {
 
-        // VERIFICAR ORIGEM
+        // VERIFICAÇÃO DA ORIGEM
+        // Impede solicitações de origens diferentes
+        // das autorizadas pelo sistema.
 
         String origem = requisicao
             .getRequestHeaders()
@@ -87,7 +105,11 @@ public class MovimentacoesHandler implements HttpHandler {
             return;
         }
 
-        // CONFIGURAR CORS
+        // =================================================
+        // CONFIGURAÇÃO DE CORS
+        // Permite que o frontend envie requisições
+        // com conteúdo JSON e token de autenticação.
+        // =================================================
 
         if (origem != null) {
 
@@ -123,7 +145,12 @@ public class MovimentacoesHandler implements HttpHandler {
         String rota =
             requisicao.getRequestURI().getPath();
 
-        // VALIDAR ROTA
+        // =================================================
+        // VALIDAÇÃO DA ROTA E DO MÉTODO HTTP
+        // Garante que a solicitação seja destinada
+        // ao endpoint de movimentações e utiliza
+        // somente os métodos POST e OPTIONS.
+        // =================================================
 
         if (!"/api/movimentacoes".equals(rota)) {
 
@@ -136,7 +163,7 @@ public class MovimentacoesHandler implements HttpHandler {
             return;
         }
 
-        // RESPONDER OPTIONS
+        // Responde às verificações de CORS do navegador.
 
         if ("OPTIONS".equals(metodo)) {
 
@@ -146,7 +173,7 @@ public class MovimentacoesHandler implements HttpHandler {
             return;
         }
 
-        // PERMITIR SOMENTE POST
+        // O registro de saída deve utilizar POST.
 
         if (!"POST".equals(metodo)) {
 
@@ -166,14 +193,12 @@ public class MovimentacoesHandler implements HttpHandler {
 
         try {
 
-            // AUTENTICAR USUÁRIO
-
-            // O SESSAOSERVICE VALIDA:
-            // 1. TOKEN BEARER
-            // 2. SESSÃO EXISTENTE
-            // 3. DATA DE EXPIRAÇÃO
-            // 4. USUÁRIO CADASTRADO
-            // 5. USUÁRIO ATIVO
+            // =================================================
+            // AUTENTICAÇÃO DO USUÁRIO
+            // Utiliza o SessaoService para verificar o token
+            // Bearer, a existência e validade da sessão
+            // e a situação do usuário cadastrado.
+            // =================================================
 
             Document usuario =
                 sessaoService.autenticar(
@@ -194,13 +219,20 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // RECUPERAR ID REAL DA CONTA
+            // IDENTIFICAÇÃO DA CONTA AUTENTICADA
+            // Obtém o ID diretamente da sessão validada,
+            // evitando confiar em identificadores enviados
+            // pelo frontend no corpo da requisição.
 
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
 
-            // LER CORPO DA REQUISIÇÃO
-            // LIMITE DE 8 KB
+            // =================================================
+            // LEITURA E LIMITAÇÃO DO CORPO DA REQUISIÇÃO
+            // Lê os dados enviados pelo formulário e
+            // impede o processamento de conteúdos
+            // maiores que 8 KB.
+            // =================================================
 
             byte[] conteudo =
                 requisicao.getRequestBody()
@@ -217,7 +249,12 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // CONVERTER CORPO JSON
+            // =================================================
+            // CONVERSÃO DOS DADOS JSON
+            // Transforma o conteúdo recebido em Document
+            // para que o Service possa validar e processar
+            // as informações da movimentação.
+            // =================================================
 
             Document dados;
 
@@ -241,10 +278,12 @@ public class MovimentacoesHandler implements HttpHandler {
                 return;
             }
 
-            // REGISTRAR SAÍDA
-
-            // O USUARIOID É OBTIDO DA SESSÃO
-            // E NÃO DO JSON ENVIADO PELO FRONTEND
+            // =================================================
+            // REGISTRO DA MOVIMENTAÇÃO PELO SERVICE
+            // Encaminha os dados da saída e o ID do usuário
+            // autenticado para aplicação das regras
+            // de negócio e atualização do estoque.
+            // =================================================
 
             MovimentacoesService.Resultado resultado =
                 movimentacoesService.registrarSaida(
@@ -252,7 +291,11 @@ public class MovimentacoesHandler implements HttpHandler {
                     usuarioId
                 );
 
-            // RETORNAR RESULTADO
+            // =================================================
+            // RETORNO DO RESULTADO AO FRONTEND
+            // Envia o código HTTP e a mensagem produzidos
+            // pelo Service após o processamento da saída.
+            // =================================================
 
             responder(
                 requisicao,
@@ -262,6 +305,12 @@ public class MovimentacoesHandler implements HttpHandler {
 
         } catch (IllegalArgumentException erro) {
 
+            // =================================================
+            // TRATAMENTO DE DADOS INVÁLIDOS
+            // Retorna HTTP 400 quando os dados
+            // recebidos não atendem às validações.
+            // =================================================
+
             responder(
                 requisicao,
                 400,
@@ -270,6 +319,12 @@ public class MovimentacoesHandler implements HttpHandler {
             );
 
         } catch (MongoException erro) {
+
+            // =================================================
+            // TRATAMENTO DE FALHAS NO MONGODB
+            // Registra o erro no servidor e informa
+            // que não foi possível confirmar a operação.
+            // =================================================
 
             System.err.println(
                 "Erro MongoDB em movimentações: " +
@@ -284,6 +339,12 @@ public class MovimentacoesHandler implements HttpHandler {
 
         } catch (RuntimeException erro) {
 
+            // =================================================
+            // TRATAMENTO DE ERROS INTERNOS
+            // Evita que falhas inesperadas deixem
+            // a requisição sem uma resposta adequada.
+            // =================================================
+
             System.err.println(
                 "Erro ao registrar movimentação: " +
                 erro.getMessage()
@@ -297,7 +358,11 @@ public class MovimentacoesHandler implements HttpHandler {
         }
     }
 
-    // ENVIAR RESPOSTA JSON
+    // =====================================================
+    // FORMATAÇÃO E ENVIO DAS RESPOSTAS JSON
+    // Organiza a mensagem em formato JSON, configura
+    // os cabeçalhos HTTP e envia a resposta ao frontend.
+    // =====================================================
 
     private static void responder(
         HttpExchange requisicao,

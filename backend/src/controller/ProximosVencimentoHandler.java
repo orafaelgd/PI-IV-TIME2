@@ -23,24 +23,34 @@ import java.util.Set;
 
 public class ProximosVencimentoHandler implements HttpHandler {
 
-    // ORIGENS PERMITIDAS
+    // =====================================================
+    // CONFIGURAÇÕES DE ACESSO E FILTROS
+    // Define as origens autorizadas a acessar a API
+    // e os períodos disponíveis para consulta.
+    // =====================================================
 
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
     );
 
-    // PERÍODOS PERMITIDOS
-
     private static final Set<Integer> PERIODOS_VALIDOS =
         Set.of(1, 3, 7, 15, 30);
 
-    // SERVIÇOS
+    // =====================================================
+    // SERVIÇOS UTILIZADOS PELO CONTROLLER
+    // O serviço de vencimentos executa as consultas.
+    // O serviço de sessão autentica o usuário.
+    // =====================================================
 
     private final ProximosVencimentoService vencimentoService;
     private final SessaoService sessaoService;
 
+    // =====================================================
     // CONSTRUTOR
+    // Recebe as coleções do MongoDB e inicializa
+    // os serviços necessários para a funcionalidade.
+    // =====================================================
 
     public ProximosVencimentoHandler(
         MongoCollection<Document> lotes,
@@ -62,7 +72,12 @@ public class ProximosVencimentoHandler implements HttpHandler {
             );
     }
 
-    // RECEBER REQUISIÇÕES
+    // =====================================================
+    // RECEBIMENTO DAS REQUISIÇÕES HTTP
+    // Controla o acesso à API, verifica a origem,
+    // valida a rota e permite apenas os métodos
+    // utilizados pela funcionalidade.
+    // =====================================================
 
     @Override
     public void handle(HttpExchange requisicao)
@@ -72,7 +87,7 @@ public class ProximosVencimentoHandler implements HttpHandler {
             .getRequestHeaders()
             .getFirst("Origin");
 
-        // VERIFICAR ORIGEM
+        // VERIFICAÇÃO DA ORIGEM DA REQUISIÇÃO
 
         if (
             origem != null &&
@@ -91,7 +106,9 @@ public class ProximosVencimentoHandler implements HttpHandler {
             return;
         }
 
-        // CONFIGURAR CORS
+        // CONFIGURAÇÃO DE CORS
+        // Permite que o frontend local realize requisições
+        // e envie o token de autenticação.
 
         if (origem != null) {
 
@@ -121,7 +138,9 @@ public class ProximosVencimentoHandler implements HttpHandler {
             "no-store"
         );
 
-        // VALIDAR ROTA
+        // VALIDAÇÃO DA ROTA
+        // Garante que a requisição seja destinada
+        // ao endpoint de próximos vencimentos.
 
         String rota = requisicao
             .getRequestURI()
@@ -143,7 +162,9 @@ public class ProximosVencimentoHandler implements HttpHandler {
             return;
         }
 
-        // RESPONDER OPTIONS
+        // TRATAMENTO DO MÉTODO OPTIONS
+        // Responde às verificações de CORS realizadas
+        // pelo navegador antes de determinadas requisições.
 
         String metodo =
             requisicao.getRequestMethod();
@@ -156,7 +177,8 @@ public class ProximosVencimentoHandler implements HttpHandler {
             return;
         }
 
-        // PERMITIR SOMENTE GET
+        // VALIDAÇÃO DO MÉTODO HTTP
+        // A consulta de vencimentos aceita apenas GET.
 
         if (!"GET".equals(metodo)) {
 
@@ -179,7 +201,11 @@ public class ProximosVencimentoHandler implements HttpHandler {
 
         try {
 
-            // AUTENTICAR USUÁRIO PELO TOKEN
+            // =================================================
+            // AUTENTICAÇÃO DO USUÁRIO
+            // Verifica a sessão pelo token enviado
+            // e impede consultas sem autenticação válida.
+            // =================================================
 
             Document usuario =
                 sessaoService.autenticar(requisicao);
@@ -201,19 +227,28 @@ public class ProximosVencimentoHandler implements HttpHandler {
                 return;
             }
 
-            // RECUPERAR USUÁRIO LOGADO
+            // IDENTIFICAÇÃO DO USUÁRIO AUTENTICADO
+            // O identificador será utilizado para consultar
+            // os dados vinculados à conta correspondente.
 
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
 
-            // LER PERÍODO
+            // =================================================
+            // LEITURA DOS FILTROS DE VENCIMENTO
+            // Recupera o período solicitado pela interface.
+            // =================================================
 
             int dias = lerDias(
                 requisicao.getRequestURI()
                     .getRawQuery()
             );
 
-            // CONSULTAR O SERVICE
+            // =================================================
+            // CONSULTA DOS PRÓXIMOS VENCIMENTOS
+            // Encaminha o período e o usuário ao Service,
+            // responsável pelas regras de negócio.
+            // =================================================
 
             Document resultado =
                 vencimentoService.consultarProximosVencimentos(
@@ -221,7 +256,8 @@ public class ProximosVencimentoHandler implements HttpHandler {
                     usuarioId
                 );
 
-            // ENVIAR RESPOSTA
+            // RETORNO DA CONSULTA
+            // Envia os dados obtidos pelo Service ao frontend.
 
             responder(
                 requisicao,
@@ -230,6 +266,12 @@ public class ProximosVencimentoHandler implements HttpHandler {
             );
 
         } catch (IllegalArgumentException erro) {
+
+            // =================================================
+            // TRATAMENTO DE PARÂMETROS INVÁLIDOS
+            // Retorna HTTP 400 quando os filtros
+            // informados não são aceitos.
+            // =================================================
 
             responder(
                 requisicao,
@@ -241,6 +283,12 @@ public class ProximosVencimentoHandler implements HttpHandler {
             );
 
         } catch (MongoException erro) {
+
+            // =================================================
+            // TRATAMENTO DE ERROS DO MONGODB
+            // Registra a falha no servidor e retorna
+            // uma mensagem genérica para o frontend.
+            // =================================================
 
             System.err.println(
                 "Erro MongoDB nos vencimentos: " +
@@ -258,6 +306,12 @@ public class ProximosVencimentoHandler implements HttpHandler {
 
         } catch (RuntimeException erro) {
 
+            // =================================================
+            // TRATAMENTO DE ERROS INTERNOS
+            // Evita que falhas inesperadas interrompam
+            // o fluxo de resposta da API.
+            // =================================================
+
             System.err.println(
                 "Erro nos vencimentos: " +
                 erro.getMessage()
@@ -274,11 +328,14 @@ public class ProximosVencimentoHandler implements HttpHandler {
         }
     }
 
-    // LER PARÂMETRO DIAS
+    // =====================================================
+    // LEITURA E VALIDAÇÃO DO PARÂMETRO DIAS
+    // Interpreta os parâmetros recebidos pela URL.
+    // Caso nenhum período seja informado, utiliza 7 dias.
+    // Aceita apenas os cinco períodos definidos pelo sistema.
+    // =====================================================
 
     private static int lerDias(String query) {
-
-        // VALOR PADRÃO: 7 DIAS
 
         int dias = 7;
         boolean encontrado = false;
@@ -298,6 +355,8 @@ public class ProximosVencimentoHandler implements HttpHandler {
             );
 
             if ("dias".equals(nome)) {
+
+                // Impede parâmetros repetidos ou incompletos.
 
                 if (
                     encontrado ||
@@ -329,7 +388,8 @@ public class ProximosVencimentoHandler implements HttpHandler {
             }
         }
 
-        // VALIDAR OS CINCO FILTROS
+        // VALIDAÇÃO FINAL DO PERÍODO
+        // Impede consultas com valores não previstos.
 
         if (!PERIODOS_VALIDOS.contains(dias)) {
 
@@ -341,7 +401,11 @@ public class ProximosVencimentoHandler implements HttpHandler {
         return dias;
     }
 
-    // RESPOSTA JSON
+    // =====================================================
+    // FORMATAÇÃO E ENVIO DA RESPOSTA JSON
+    // Converte o Document para JSON, configura o tipo
+    // de conteúdo e devolve a resposta HTTP ao navegador.
+    // =====================================================
 
     private static void responder(
         HttpExchange requisicao,
