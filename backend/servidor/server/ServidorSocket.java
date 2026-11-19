@@ -26,13 +26,13 @@ public class ServidorSocket implements Runnable {
   private final RepositorioVencimentos repositorio;
   private final SessaoService sessaoService;
 
-  private static final int PORTA = 8081;
+  private final int porta;
 
   @Override
   public void run() {
-    try (ServerSocket servidor = new ServerSocket(PORTA)) {
+    try (ServerSocket servidor = new ServerSocket(porta)) {
 
-      System.out.println("Servidor iniciado na porta " + PORTA);
+      System.out.println("Servidor iniciado na porta " + porta);
 
       while (true) {
         Socket cliente = servidor.accept();
@@ -46,9 +46,14 @@ public class ServidorSocket implements Runnable {
     }
   }
 
-  public ServidorSocket(RepositorioVencimentos repo, SessaoService sessaoServ) {
-    repositorio = repo;
-    sessaoService = sessaoServ;
+  public ServidorSocket(
+        RepositorioVencimentos repo,
+        SessaoService sessaoServ,
+        int porta) {
+
+    this.repositorio = repo;
+    this.sessaoService = sessaoServ;
+    this.porta = porta;
   }
 
   private void atenderCliente(Socket cliente) {

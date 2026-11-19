@@ -287,7 +287,7 @@ public class Main {
                         // do servidor HTTP da porta 8080
 
                         Thread threadServidor = new Thread(
-                                        new ServidorSocket(repositorio, sessaoService),
+                                        new ServidorSocket(repositorio, sessaoService, 8081),
                                         "servidor-vencimentos");
 
                         // ENCERRAMENTO SEGURO
