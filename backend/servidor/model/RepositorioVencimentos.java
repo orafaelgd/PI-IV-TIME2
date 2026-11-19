@@ -11,17 +11,16 @@ import org.bson.types.ObjectId;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+
+import java.time.ZoneOffset;
 
 public class RepositorioVencimentos {
 
   private final MongoCollection<Document> lotes;
   private final MongoCollection<Document> produtos;
-
-  private static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
 
   public RepositorioVencimentos(
       MongoCollection<Document> lotes,
@@ -32,20 +31,21 @@ public class RepositorioVencimentos {
   }
 
   public List<LoteProximoVencimento> buscar(
-      int dias, LocalDate hoje) {
+      int dias, LocalDate hoje, ObjectId usuarioId) {
 
     Date inicio = Date.from(
-        hoje.atStartOfDay(FUSO).toInstant());
+        hoje.atStartOfDay(ZoneOffset.UTC).toInstant());
 
     Date fim = Date.from(
         hoje.plusDays(dias)
-            .atStartOfDay(FUSO)
+            .atStartOfDay(ZoneOffset.UTC)
             .toInstant());
 
     List<LoteProximoVencimento> resultado = new ArrayList<>();
 
     try (MongoCursor<Document> cursor = lotes.find(
         and(
+            eq("usuarioId", usuarioId),
             gte("dataValidade", inicio),
             lt("dataValidade", fim),
             gt("quantidadeDisponivel",
@@ -64,8 +64,7 @@ public class RepositorioVencimentos {
           continue;
         }
 
-        Document produto = produtos.find(
-            eq("_id", itemId)).first();
+        Document produto = produtos.find(and(eq("_id", itemId), eq("usuarioId", usuarioId))).first();
 
         if (produto == null ||
             !"ativo".equalsIgnoreCase(
@@ -89,7 +88,7 @@ public class RepositorioVencimentos {
 
         LocalDate dataValidade = validade
             .toInstant()
-            .atZone(FUSO)
+            .atZone(ZoneOffset.UTC)
             .toLocalDate();
 
         LoteProximoVencimento registro = new LoteProximoVencimento(
