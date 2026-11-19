@@ -20,22 +20,32 @@ import static com.mongodb.client.model.Filters.*;
 
 public class ProximosVencimentoService {
 
-    // CONFIGURAÇÕES
+    // =====================================================
+    // CONFIGURAÇÕES DE DATA E PERÍODOS PERMITIDOS
+    // Define o fuso horário utilizado pelo sistema
+    // e os intervalos disponíveis para consulta.
+    // =====================================================
 
     private static final ZoneId FUSO =
         ZoneId.of("America/Sao_Paulo");
 
-    // PERÍODOS PERMITIDOS
-
     private static final Set<Integer> PERIODOS_VALIDOS =
         Set.of(1, 3, 7, 15, 30);
 
+    // =====================================================
     // COLEÇÕES DO MONGODB
+    // Armazena as referências às coleções de lotes
+    // e produtos utilizadas nas consultas.
+    // =====================================================
 
     private final MongoCollection<Document> lotes;
     private final MongoCollection<Document> produtos;
 
+    // =====================================================
     // CONSTRUTOR
+    // Recebe as coleções do MongoDB disponibilizadas
+    // pelo Controller para realizar as consultas.
+    // =====================================================
 
     public ProximosVencimentoService(
         MongoCollection<Document> lotes,
@@ -45,14 +55,21 @@ public class ProximosVencimentoService {
         this.produtos = produtos;
     }
 
-    // CONSULTAR PRÓXIMOS VENCIMENTOS
+    // =====================================================
+    // CONSULTA DOS PRÓXIMOS VENCIMENTOS
+    // Executa as regras de negócio para identificar
+    // lotes próximos do vencimento pertencentes ao
+    // usuário autenticado.
+    // =====================================================
 
     public Document consultarProximosVencimentos(
         int dias,
         ObjectId usuarioId
     ) {
 
-        // VALIDAR USUÁRIO
+        // VALIDAÇÃO DO USUÁRIO
+        // Impede consultas quando não existe
+        // um identificador de usuário válido.
 
         if (usuarioId == null) {
             throw new IllegalArgumentException(
@@ -60,7 +77,9 @@ public class ProximosVencimentoService {
             );
         }
 
-        // VALIDAR PERÍODO
+        // VALIDAÇÃO DO PERÍODO
+        // Permite apenas os intervalos de dias
+        // definidos pela funcionalidade.
 
         if (!PERIODOS_VALIDOS.contains(dias)) {
             throw new IllegalArgumentException(
@@ -68,8 +87,12 @@ public class ProximosVencimentoService {
             );
         }
 
-        // CALCULAR PERÍODO
-        // HOJE É CONSIDERADO O PRIMEIRO DIA
+        // =================================================
+        // DEFINIÇÃO DO INTERVALO DE DATAS
+        // Considera o dia atual como o primeiro dia
+        // e calcula os limites da consulta.
+        // O limite final é exclusivo.
+        // =================================================
 
         LocalDate hoje = LocalDate.now(FUSO);
 
@@ -85,11 +108,18 @@ public class ProximosVencimentoService {
         );
 
         // LISTA DE RESULTADOS
+        // Armazena os lotes encontrados após
+        // a aplicação de todos os critérios.
 
         List<Document> resultado = new ArrayList<>();
 
-        // CONSULTAR LOTES DA CONTA AUTENTICADA
-        // SOMENTE LOTES COM SALDO E NÃO INATIVOS
+        // =================================================
+        // CONSULTA DOS LOTES NO MONGODB
+        // Busca somente os lotes da conta autenticada,
+        // com validade dentro do período selecionado,
+        // saldo positivo e que não estejam arquivados
+        // ou marcados como inativos.
+        // =================================================
 
         try (
             MongoCursor<Document> cursor =
@@ -110,7 +140,12 @@ public class ProximosVencimentoService {
                 .iterator()
         ) {
 
-            // PERCORRER LOTES
+            // =================================================
+            // PROCESSAMENTO DOS LOTES ENCONTRADOS
+            // Percorre os registros e verifica a existência
+            // dos produtos relacionados antes de incluí-los
+            // no resultado da consulta.
+            // =================================================
 
             while (cursor.hasNext()) {
 
@@ -123,7 +158,11 @@ public class ProximosVencimentoService {
                     continue;
                 }
 
-                // VERIFICAR PRODUTO DA MESMA CONTA
+                // =================================================
+                // VERIFICAÇÃO DO PRODUTO E DO USUÁRIO
+                // Confirma que o produto relacionado ao lote
+                // pertence à mesma conta autenticada.
+                // =================================================
 
                 Document produto = produtos.find(
                     and(
@@ -136,7 +175,9 @@ public class ProximosVencimentoService {
                     continue;
                 }
 
-                // IGNORAR PRODUTOS INATIVOS
+                // FILTRO DE PRODUTOS ATIVOS
+                // Ignora os produtos que não possuem
+                // o status ativo no cadastro.
 
                 String status =
                     produto.getString("status");
@@ -145,7 +186,11 @@ public class ProximosVencimentoService {
                     continue;
                 }
 
-                // RECUPERAR DADOS
+                // =================================================
+                // RECUPERAÇÃO DOS DADOS DO LOTE
+                // Obtém o identificador, a data de validade
+                // e o saldo disponível para apresentação.
+                // =================================================
 
                 ObjectId loteId =
                     lote.getObjectId("_id");
@@ -159,6 +204,9 @@ public class ProximosVencimentoService {
                         Decimal128.class
                     );
 
+                // Ignora registros sem as informações
+                // necessárias para a tabela.
+
                 if (
                     loteId == null ||
                     validade == null ||
@@ -167,7 +215,12 @@ public class ProximosVencimentoService {
                     continue;
                 }
 
-                // FORMATAR DATA DE VALIDADE
+                // =================================================
+                // FORMATAÇÃO DA DATA E DA QUANTIDADE
+                // Converte a validade para uma data legível
+                // e o saldo Decimal128 para texto, preservando
+                // a representação decimal do valor.
+                // =================================================
 
                 String dataValidade =
                     validade.toInstant()
@@ -175,13 +228,15 @@ public class ProximosVencimentoService {
                         .toLocalDate()
                         .toString();
 
-                // FORMATAR QUANTIDADE
-
                 String quantidadeDisponivel =
                     saldo.bigDecimalValue()
                         .toPlainString();
 
-                // MONTAR DADOS PARA A TABELA
+                // =================================================
+                // ORGANIZAÇÃO DOS DADOS PARA O FRONTEND
+                // Monta um documento com as informações
+                // utilizadas na tabela de próximos vencimentos.
+                // =================================================
 
                 Document registro = new Document()
                     .append(
@@ -217,7 +272,12 @@ public class ProximosVencimentoService {
             }
         }
 
-        // RESPOSTA PARA O FRONTEND
+        // =====================================================
+        // MONTAGEM DA RESPOSTA FINAL
+        // Retorna o intervalo consultado, a quantidade
+        // de lotes encontrados e a lista de registros
+        // para apresentação no frontend.
+        // =====================================================
 
         return new Document()
             .append("dataInicio", hoje.toString())

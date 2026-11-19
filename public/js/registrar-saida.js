@@ -1,10 +1,11 @@
 
-// REGISTRAR SAÍDA
-// AUTENTICAÇÃO, VALIDAÇÕES E INTEGRAÇÃO COM MONGODB
-
 document.addEventListener("DOMContentLoaded", () => {
 
-    // CONFIGURAÇÕES
+    // =====================================================
+    // CONFIGURAÇÕES E ELEMENTOS DO FORMULÁRIO
+    // Define a API utilizada, os motivos permitidos
+    // e os campos necessários para registrar uma saída.
+    // =====================================================
 
     const API = "http://localhost:8080/api";
     const PAGINA_LOGIN = "login-usuario.html";
@@ -16,8 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
         "danificado",
         "outro"
     ];
-
-    // ELEMENTOS DO FORMULÁRIO
 
     const formulario = document.getElementById(
         "form-registrar-saida"
@@ -58,21 +57,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const mensagem =
         document.getElementById("mensagemFormulario");
 
-    // DADOS CARREGADOS
+    // Armazena os dados recebidos da API e controla
+    // os estados de carregamento e envio do formulário.
 
     let produtos = [];
     let lotes = [];
 
-    // CONTROLE DO FORMULÁRIO
-
     let carregandoDados = false;
     let enviando = false;
 
-    // PROTEÇÃO CONTRA REGISTRO DUPLICADO
+    // Guarda os dados de uma operação cujo resultado
+    // ainda não foi confirmado, evitando baixas duplicadas.
 
     let operacaoPendente = null;
 
-    // VERIFICAR ELEMENTOS OBRIGATÓRIOS
+    // Confirma a existência dos campos obrigatórios.
 
     if (
         !produtoSelect ||
@@ -86,39 +85,35 @@ document.addEventListener("DOMContentLoaded", () => {
         !botaoCancelar ||
         !mensagem
     ) {
-
         console.error(
             "Campos do formulário de saída não encontrados."
         );
-
         return;
     }
 
-    // AUTENTICAÇÃO
+    // =====================================================
+    // AUTENTICAÇÃO E CONTROLE DE SESSÃO
+    // Recupera o token do usuário e o utiliza nas
+    // requisições. Caso a sessão seja inválida ou
+    // expirada, limpa os dados locais e redireciona
+    // o usuário para a página de login.
+    // =====================================================
 
     function obterToken() {
-
         return sessionStorage.getItem("token");
     }
 
-    // ENCERRAR SESSÃO
-
     function encerrarAcesso() {
-
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("usuario");
 
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // VERIFICAR SESSÃO
-
     function verificarSessao() {
-
         const token = obterToken();
 
         if (!token || !token.trim()) {
-
             encerrarAcesso();
             return false;
         }
@@ -126,25 +121,27 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     }
 
-    // REQUISIÇÕES AUTENTICADAS
+    // =====================================================
+    // COMUNICAÇÃO AUTENTICADA COM O BACKEND
+    // Adiciona o token Bearer às requisições para
+    // permitir que o SessaoService identifique o usuário.
+    // Também identifica respostas de acesso negado
+    // e sessões expiradas.
+    // =====================================================
 
     async function requisicaoAutenticada(
         url,
         opcoes = {}
     ) {
-
         const token = obterToken();
 
         if (!token || !token.trim()) {
-
             encerrarAcesso();
 
             throw new Error(
                 "Sessão não encontrada."
             );
         }
-
-        // ENVIAR TOKEN PARA O SESSAOSERVICE
 
         const headers = new Headers(
             opcoes.headers || {}
@@ -156,18 +153,12 @@ document.addEventListener("DOMContentLoaded", () => {
         );
 
         const resposta = await fetch(url, {
-
             ...opcoes,
-
             headers,
-
             cache: "no-store"
         });
 
-        // SESSÃO INVÁLIDA OU EXPIRADA
-
         if (resposta.status === 401) {
-
             encerrarAcesso();
 
             throw new Error(
@@ -175,10 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         }
 
-        // ACESSO NEGADO
-
         if (resposta.status === 403) {
-
             throw new Error(
                 "Você não tem permissão para realizar esta operação."
             );
@@ -187,22 +175,21 @@ document.addEventListener("DOMContentLoaded", () => {
         return resposta;
     }
 
-    // LER RESPOSTA DO BACKEND
+    // =====================================================
+    // LEITURA DAS RESPOSTAS DA API
+    // Interpreta o conteúdo retornado pelo backend
+    // e transforma respostas com erro em exceções
+    // que podem ser tratadas pelo formulário.
+    // =====================================================
 
     async function lerResposta(resposta) {
-
         const texto = await resposta.text();
-
         let dados = {};
 
         if (texto) {
-
             try {
-
                 dados = JSON.parse(texto);
-
             } catch {
-
                 dados = {
                     mensagem: texto
                 };
@@ -210,7 +197,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!resposta.ok) {
-
             const erro = new Error(
                 dados.mensagem ||
                 dados.erro ||
@@ -225,26 +211,30 @@ document.addEventListener("DOMContentLoaded", () => {
         return dados;
     }
 
-    // MENSAGENS DO FORMULÁRIO
+    // =====================================================
+    // EXIBIÇÃO DAS MENSAGENS DO FORMULÁRIO
+    // Apresenta avisos de validação e erros de
+    // comunicação com o backend ao usuário.
+    // =====================================================
 
     function mostrarErro(texto) {
-
         mensagem.textContent = texto;
-
         mensagem.classList.remove("hidden");
     }
 
     function limparErro() {
-
         mensagem.textContent = "";
-
         mensagem.classList.add("hidden");
     }
 
-    // DATA ATUAL EM SÃO PAULO
+    // =====================================================
+    // CONFIGURAÇÃO DA DATA DE SAÍDA
+    // Obtém a data atual considerando o fuso horário
+    // de São Paulo, define o valor inicial do campo
+    // e impede a seleção de datas futuras.
+    // =====================================================
 
     function dataAtual() {
-
         const partes = new Intl.DateTimeFormat(
             "en-US",
             {
@@ -269,36 +259,33 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // CONFIGURAR DATA
-
     function configurarData() {
-
         const hoje = dataAtual();
 
         dataSaida.max = hoje;
         dataSaida.value = hoje;
     }
 
-    // CONVERTER DECIMAL128 DO MONGODB
+    // =====================================================
+    // TRATAMENTO DOS DADOS RECEBIDOS DO MONGODB
+    // Converte valores Decimal128, recupera diferentes
+    // formatos de identificadores e padroniza nomes
+    // utilizados nas respostas de produtos e lotes.
+    // =====================================================
 
     function converterNumero(valor) {
-
         if (
             valor &&
             typeof valor === "object" &&
             "$numberDecimal" in valor
         ) {
-
             valor = valor.$numberDecimal;
         }
 
         return Number(valor);
     }
 
-    // OBTER IDENTIFICADOR
-
     function obterId(registro) {
-
         if (!registro) {
             return "";
         }
@@ -315,7 +302,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (id && typeof id === "object") {
-
             return id.$oid ??
                 id.oid ??
                 "";
@@ -324,10 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return "";
     }
 
-    // OBTER NOME DO PRODUTO
-
     function obterNomeProduto(produto) {
-
         return String(
             produto.nomeProduto ??
             produto.nome ??
@@ -336,10 +319,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ).trim();
     }
 
-    // NORMALIZAR TEXTO
-
     function normalizarTexto(texto) {
-
         return String(texto ?? "")
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
@@ -347,10 +327,14 @@ document.addEventListener("DOMContentLoaded", () => {
             .toLowerCase();
     }
 
-    // CRIAR OPÇÃO
+    // =====================================================
+    // SELEÇÃO DE PRODUTOS E LOTES
+    // Identifica os registros escolhidos pelo usuário
+    // e verifica se o lote pertence ao produto,
+    // está disponível e possui saldo positivo.
+    // =====================================================
 
     function criarOpcao(valor, texto) {
-
         const opcao =
             document.createElement("option");
 
@@ -360,57 +344,44 @@ document.addEventListener("DOMContentLoaded", () => {
         return opcao;
     }
 
-    // OBTER PRODUTO SELECIONADO
-
     function produtoSelecionado() {
-
         return produtos.find(
             (produto) =>
                 produto.id === produtoSelect.value
         );
     }
 
-    // OBTER LOTE SELECIONADO
-
     function loteSelecionado() {
-
         return lotes.find(
             (lote) =>
                 lote.id === loteSelect.value
         );
     }
 
-    // VERIFICAR SE O LOTE PERTENCE AO PRODUTO
-
     function mesmoProduto(lote, produto) {
-
         if (!lote || !produto) {
             return false;
         }
 
-        // PRIORIZAR RELACIONAMENTO POR ID
+        // Prioriza o relacionamento pelo identificador.
+        // Quando necessário, utiliza o nome do produto
+        // para compatibilidade com a resposta da API.
 
         if (lote.itemId) {
-
             return lote.itemId === produto.id;
         }
-
-        // COMPATIBILIDADE COM A API DE LOTES
-        // QUE RETORNA SOMENTE O NOME DO PRODUTO
 
         return normalizarTexto(lote.produto) ===
             normalizarTexto(produto.nome);
     }
 
-    // VERIFICAR DISPONIBILIDADE DO LOTE
-
     function loteDisponivel(lote) {
-
         if (!lote) {
             return false;
         }
 
-        // IGNORAR LOTES INATIVOS OU ARQUIVADOS
+        // Lotes inativos, arquivados ou sem saldo
+        // não podem ser selecionados para uma saída.
 
         if (
             lote.inativo === true ||
@@ -429,10 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // LISTAR LOTES DISPONÍVEIS DO PRODUTO
-
     function lotesDoProduto(produto) {
-
         if (!produto) {
             return [];
         }
@@ -444,10 +412,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // FORMATAR QUANTIDADE
-
     function formatarQuantidade(valor) {
-
         const numero = converterNumero(valor);
 
         if (!Number.isFinite(numero)) {
@@ -459,10 +424,15 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // LIMPAR LOTE
+    // =====================================================
+    // CONTROLE DOS CAMPOS DO FORMULÁRIO
+    // Limpa as informações dos lotes e bloqueia
+    // alterações enquanto os dados estão carregando,
+    // uma saída está sendo enviada ou existe uma
+    // operação pendente de confirmação.
+    // =====================================================
 
     function limparLotes() {
-
         loteSelect.replaceChildren(
             criarOpcao(
                 "",
@@ -478,16 +448,11 @@ document.addEventListener("DOMContentLoaded", () => {
         loteSelect.disabled = true;
     }
 
-    // ATUALIZAR BLOQUEIO DOS CAMPOS
-
     function atualizarBloqueio() {
-
         const bloquear =
             carregandoDados ||
             enviando ||
             operacaoPendente !== null;
-
-        // CAMPOS DE EDIÇÃO
 
         const campos = [
             produtoSelect,
@@ -499,18 +464,15 @@ document.addEventListener("DOMContentLoaded", () => {
         ];
 
         campos.forEach((campo) => {
-
             campo.disabled = bloquear;
         });
 
-        // SALDO SEMPRE SOMENTE LEITURA
+        // O saldo disponível é apenas informativo
+        // e não pode ser editado diretamente.
 
         quantidadeDisponivel.readOnly = true;
 
-        // HABILITAR SOMENTE PRODUTOS DISPONÍVEIS
-
         if (!bloquear) {
-
             produtoSelect.disabled =
                 produtos.length === 0;
 
@@ -521,8 +483,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 lotesDoProduto(produto).length === 0;
         }
 
-        // O BOTÃO PERMITE REPETIR A MESMA OPERAÇÃO
-        // EM CASO DE RESULTADO NÃO CONFIRMADO
+        // Quando existe uma operação pendente,
+        // o botão permite reenviar os mesmos dados
+        // mantendo a chave de idempotência original.
 
         botaoEnviar.disabled =
             carregandoDados ||
@@ -541,42 +504,41 @@ document.addEventListener("DOMContentLoaded", () => {
                 : "Registrar saída";
     }
 
-    // CARREGAR PRODUTOS E LOTES
+    // =====================================================
+    // CARREGAMENTO DE PRODUTOS E LOTES
+    // Consulta os dados da conta autenticada na API,
+    // identifica produtos ativos, normaliza os registros
+    // e disponibiliza apenas produtos que possuem
+    // lotes válidos com quantidade em estoque.
+    // =====================================================
 
     async function carregarDados() {
-
         carregandoDados = true;
 
         atualizarBloqueio();
         limparErro();
 
         try {
-
-            // CONSULTAR SOMENTE COM TOKEN
-
             const [
                 respostaProdutos,
                 respostaLotes
             ] = await Promise.all([
-
                 requisicaoAutenticada(
                     `${API}/produtos`
                 ),
-
                 requisicaoAutenticada(
                     `${API}/lotes`
                 )
             ]);
 
-            // LER RESPOSTAS
+            // Converte as respostas e verifica se
+            // produtos e lotes foram retornados como listas.
 
             const dadosProdutos =
                 await lerResposta(respostaProdutos);
 
             const dadosLotes =
                 await lerResposta(respostaLotes);
-
-            // VALIDAR FORMATO
 
             const listaProdutos =
                 Array.isArray(dadosProdutos)
@@ -591,17 +553,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 !Array.isArray(listaProdutos) ||
                 !Array.isArray(listaLotes)
             ) {
-
                 throw new Error(
                     "Formato inválido dos dados retornados."
                 );
             }
 
-            // MANTER SOMENTE PRODUTOS ATIVOS
+            // Mantém apenas produtos ativos e padroniza
+            // seus identificadores e nomes.
 
             produtos = listaProdutos
                 .filter((produto) => {
-
                     return (
                         normalizarTexto(
                             produto.status ?? "ativo"
@@ -609,29 +570,23 @@ document.addEventListener("DOMContentLoaded", () => {
                     );
                 })
                 .map((produto) => ({
-
                     ...produto,
-
                     id: obterId(produto),
-
                     nome: obterNomeProduto(produto)
                 }))
                 .filter((produto) => {
-
                     return (
                         produto.id &&
                         produto.nome
                     );
                 });
 
-            // NORMALIZAR LOTES
+            // Padroniza os identificadores dos lotes
+            // para permitir a associação com os produtos.
 
             lotes = listaLotes.map((lote) => ({
-
                 ...lote,
-
                 id: obterId(lote),
-
                 itemId:
                     typeof lote.itemId === "object"
                         ? (
@@ -644,7 +599,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         )
             }));
 
-            // PREENCHER SELECT DE PRODUTOS
+            // Preenche o seletor apenas com produtos
+            // que possuem pelo menos um lote disponível.
 
             produtoSelect.replaceChildren(
                 criarOpcao(
@@ -654,15 +610,10 @@ document.addEventListener("DOMContentLoaded", () => {
             );
 
             produtos.forEach((produto) => {
-
                 const lotesDisponiveis =
                     lotesDoProduto(produto);
 
-                // EXIBIR SOMENTE PRODUTOS COM LOTES
-                // QUE TENHAM QUANTIDADE DISPONÍVEL
-
                 if (lotesDisponiveis.length > 0) {
-
                     produtoSelect.appendChild(
                         criarOpcao(
                             produto.id,
@@ -672,9 +623,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-            // ATUALIZAR LISTA DE PRODUTOS
-            // EFETIVAMENTE DISPONÍVEIS
-
             produtos = produtos.filter(
                 (produto) =>
                     lotesDoProduto(produto).length > 0
@@ -682,16 +630,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
             limparLotes();
 
-            // INFORMAR LISTA VAZIA
-
             if (produtos.length === 0) {
-
                 mostrarErro(
                     "Nenhum produto com lote disponível foi encontrado."
                 );
             }
 
         } catch (erro) {
+
+            // Em caso de falha, limpa as listas e
+            // informa ao usuário que os dados não
+            // puderam ser carregados.
 
             console.error(
                 "Erro ao carregar produtos e lotes:",
@@ -715,17 +664,19 @@ document.addEventListener("DOMContentLoaded", () => {
             );
 
         } finally {
-
             carregandoDados = false;
-
             atualizarBloqueio();
         }
     }
 
-    // QUANDO O PRODUTO É ALTERADO
+    // =====================================================
+    // ATUALIZAÇÃO DOS LOTES CONFORME O PRODUTO
+    // Quando um produto é selecionado, apresenta
+    // somente seus lotes disponíveis, mostrando
+    // o código e a quantidade existente em estoque.
+    // =====================================================
 
     produtoSelect.addEventListener("change", () => {
-
         if (operacaoPendente || enviando) {
             return;
         }
@@ -737,12 +688,9 @@ document.addEventListener("DOMContentLoaded", () => {
             produtoSelecionado();
 
         if (!produto) {
-
             atualizarBloqueio();
             return;
         }
-
-        // CARREGAR LOTES DO PRODUTO
 
         const disponiveis =
             lotesDoProduto(produto);
@@ -755,7 +703,6 @@ document.addEventListener("DOMContentLoaded", () => {
         );
 
         disponiveis.forEach((lote) => {
-
             const codigo =
                 lote.codigo || lote.id;
 
@@ -776,7 +723,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (disponiveis.length === 0) {
-
             loteSelect.replaceChildren(
                 criarOpcao(
                     "",
@@ -788,10 +734,14 @@ document.addEventListener("DOMContentLoaded", () => {
         atualizarBloqueio();
     });
 
-    // QUANDO O LOTE É ALTERADO
+    // =====================================================
+    // ATUALIZAÇÃO DO SALDO DO LOTE
+    // Ao selecionar um lote, apresenta automaticamente
+    // a quantidade disponível e limpa a quantidade
+    // anteriormente informada para a saída.
+    // =====================================================
 
     loteSelect.addEventListener("change", () => {
-
         if (operacaoPendente || enviando) {
             return;
         }
@@ -799,8 +749,6 @@ document.addEventListener("DOMContentLoaded", () => {
         limparErro();
 
         const lote = loteSelecionado();
-
-        // PREENCHER SALDO AUTOMATICAMENTE
 
         quantidadeDisponivel.value = lote
             ? formatarQuantidade(
@@ -811,10 +759,14 @@ document.addEventListener("DOMContentLoaded", () => {
         quantidadeSaida.value = "";
     });
 
-    // CANCELAR FORMULÁRIO
+    // =====================================================
+    // CANCELAMENTO E LIMPEZA DO FORMULÁRIO
+    // Restaura os campos, limpa mensagens e redefine
+    // a data inicial, desde que não exista uma operação
+    // em andamento ou pendente de confirmação.
+    // =====================================================
 
     botaoCancelar.addEventListener("click", () => {
-
         if (enviando || operacaoPendente) {
             return;
         }
@@ -828,10 +780,14 @@ document.addEventListener("DOMContentLoaded", () => {
         atualizarBloqueio();
     });
 
-    // INVALIDAR QUANTIDADES INCORRETAS
+    // =====================================================
+    // VALIDAÇÃO IMEDIATA DA QUANTIDADE
+    // Verifica durante a digitação se a quantidade
+    // informada é positiva e não ultrapassa o saldo
+    // disponível no lote selecionado.
+    // =====================================================
 
     quantidadeSaida.addEventListener("input", () => {
-
         limparErro();
 
         const lote = loteSelecionado();
@@ -858,7 +814,6 @@ document.addEventListener("DOMContentLoaded", () => {
             !Number.isFinite(quantidade) ||
             quantidade <= 0
         ) {
-
             mostrarErro(
                 "Informe uma quantidade maior que zero."
             );
@@ -867,47 +822,51 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (quantidade > saldo) {
-
             mostrarErro(
                 "A quantidade de saída não pode superar o saldo disponível."
             );
         }
     });
 
-    // VALIDAR E PREPARAR OPERAÇÃO
+    // =====================================================
+    // VALIDAÇÃO E PREPARAÇÃO DA MOVIMENTAÇÃO
+    // Confere todas as informações antes de registrar
+    // uma saída: produto, lote, saldo, quantidade,
+    // data, motivo e observação.
+    // Também gera uma chave única para identificar
+    // a operação e impedir registros duplicados.
+    // =====================================================
 
     function prepararOperacao() {
-
         const produto =
             produtoSelecionado();
 
         const lote =
             loteSelecionado();
 
-        // VALIDAR PRODUTO E LOTE
+        // Confirma a seleção de um produto e de um lote
+        // pertencente a ele e disponível para utilização.
 
         if (!produto || !lote) {
-
             throw new Error(
                 "Selecione um produto e um lote válido."
             );
         }
 
         if (!mesmoProduto(lote, produto)) {
-
             throw new Error(
                 "O lote não pertence ao produto selecionado."
             );
         }
 
         if (!loteDisponivel(lote)) {
-
             throw new Error(
                 "O lote selecionado não está disponível."
             );
         }
 
-        // VALIDAR QUANTIDADE
+        // Valida se a quantidade é positiva e
+        // não supera o saldo disponível.
 
         const quantidadeTexto =
             quantidadeSaida.value
@@ -927,7 +886,6 @@ document.addEventListener("DOMContentLoaded", () => {
             !Number.isFinite(quantidade) ||
             quantidade <= 0
         ) {
-
             throw new Error(
                 "Informe uma quantidade de saída válida."
             );
@@ -937,42 +895,38 @@ document.addEventListener("DOMContentLoaded", () => {
             !Number.isFinite(saldo) ||
             quantidade > saldo
         ) {
-
             throw new Error(
                 "A quantidade de saída não pode superar o saldo disponível."
             );
         }
 
-        // VALIDAR DATA
+        // Impede datas futuras e motivos diferentes
+        // dos aceitos pelo sistema.
 
         if (!dataSaida.value) {
-
             throw new Error(
                 "Informe a data da saída."
             );
         }
 
         if (dataSaida.value > dataAtual()) {
-
             throw new Error(
                 "A data de saída não pode ser futura."
             );
         }
-
-        // VALIDAR MOTIVO
 
         if (
             !MOTIVOS_VALIDOS.includes(
                 motivo.value
             )
         ) {
-
             throw new Error(
                 "Selecione um motivo válido."
             );
         }
 
-        // VALIDAR OBSERVAÇÃO
+        // Exige uma observação preenchida com
+        // no máximo 1000 caracteres.
 
         const textoObservacao =
             observacao.value.trim();
@@ -981,51 +935,50 @@ document.addEventListener("DOMContentLoaded", () => {
             !textoObservacao ||
             textoObservacao.length > 1000
         ) {
-
             throw new Error(
                 "A observação deve ter entre 1 e 1000 caracteres."
             );
         }
 
-        // GERAR CHAVE ÚNICA DA OPERAÇÃO
+        // Confirma que o navegador pode gerar
+        // o identificador único da movimentação.
 
         if (!globalThis.crypto?.randomUUID) {
-
             throw new Error(
                 "O navegador não conseguiu gerar o identificador da operação."
             );
         }
 
-        // PREPARAR DADOS PARA O BACKEND
+        // Organiza os dados que serão enviados
+        // ao backend para registrar a saída.
 
         return {
-
             itemId: produto.id,
-
             loteId: lote.id,
-
             quantidade: quantidadeTexto,
-
             dataSaida: dataSaida.value,
-
             motivo: motivo.value,
-
             observacao: textoObservacao,
-
             idempotencyKey:
                 crypto.randomUUID()
         };
     }
 
-    // REGISTRAR SAÍDA
+    // =====================================================
+    // ENVIO DO REGISTRO DE SAÍDA
+    // Valida os campos e envia os dados ao Controller
+    // por uma requisição POST autenticada.
+    // Controla o estado do formulário e mantém os
+    // dados de operações ainda não confirmadas.
+    // =====================================================
 
     formulario.addEventListener(
         "submit",
         async (evento) => {
-
             evento.preventDefault();
 
-            // IMPEDIR ENVIO DUPLO SIMULTÂNEO
+            // Impede envios simultâneos enquanto
+            // outra operação estiver em andamento.
 
             if (enviando || carregandoDados) {
                 return;
@@ -1033,20 +986,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             limparErro();
 
-            // VERIFICAR SESSÃO ANTES DO ENVIO
-
             if (!verificarSessao()) {
                 return;
             }
 
-            // NOVA OPERAÇÃO
+            // Prepara uma nova operação apenas quando
+            // não existe outra pendente de confirmação.
 
             if (!operacaoPendente) {
-
                 try {
-
-                    // VALIDAR TODOS OS CAMPOS
-
                     if (!formulario.reportValidity()) {
                         return;
                     }
@@ -1058,9 +1006,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     };
 
                 } catch (erro) {
-
                     mostrarErro(erro.message);
-
                     return;
                 }
             }
@@ -1071,18 +1017,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
 
-                // REQUISIÇÃO AUTENTICADA AO CONTROLLER
+                // Envia os dados da movimentação junto
+                // ao token do usuário autenticado.
 
                 const resposta =
                     await requisicaoAutenticada(
                         `${API}/movimentacoes`,
                         {
                             method: "POST",
-
                             headers: {
                                 "Content-Type": "application/json"
                             },
-
                             body: JSON.stringify(
                                 operacaoPendente.dados
                             )
@@ -1092,11 +1037,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const resultado =
                     await lerResposta(resposta);
 
-                // OPERAÇÃO CONFIRMADA
+                // A confirmação do backend encerra
+                // a operação pendente e permite
+                // limpar os campos do formulário.
 
                 operacaoPendente = null;
-
-                // LIMPAR FORMULÁRIO
 
                 formulario.reset();
 
@@ -1109,23 +1054,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
 
             } catch (erro) {
-
                 console.error(
                     "Erro ao registrar saída:",
                     erro
                 );
 
-                // ERROS 4XX NÃO REPRESENTAM
-                // UMA OPERAÇÃO PENDENTE INCERTA
-                // EXCETO ERROS DE AUTENTICAÇÃO,
-                // QUE REDIRECIONAM AO LOGIN
+                // Erros HTTP 4xx são tratados como
+                // operações rejeitadas pelo servidor.
+                // Nesse caso, a pendência é removida.
 
                 if (
                     Number.isInteger(erro.status) &&
                     erro.status >= 400 &&
                     erro.status < 500
                 ) {
-
                     operacaoPendente = null;
 
                     mostrarErro(
@@ -1134,9 +1076,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 } else {
 
-                    // CONEXÃO OU RESULTADO NÃO CONFIRMADO
-                    // PRESERVAR DADOS E A MESMA CHAVE
-                    // PARA EVITAR BAIXA DUPLICADA
+                    // Se houver falha de conexão ou
+                    // resultado não confirmado, os dados
+                    // e a chave de idempotência são mantidos.
+                    // Assim, o usuário pode tentar novamente
+                    // sem provocar uma nova baixa no estoque.
 
                     mostrarErro(
                         "Não foi possível confirmar a operação. " +
@@ -1148,22 +1092,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
             } finally {
-
                 enviando = false;
 
                 atualizarBloqueio();
             }
 
-            // ATUALIZAR SALDO DEPOIS DA CONFIRMAÇÃO
+            // Atualiza os produtos e os saldos dos lotes
+            // apenas quando não existe operação pendente.
 
             if (!operacaoPendente) {
-
                 await carregarDados();
             }
         }
     );
 
-    // INICIALIZAR TELA
+    // =====================================================
+    // INICIALIZAÇÃO DA TELA
+    // Verifica se existe uma sessão autenticada,
+    // configura a data atual e carrega os produtos
+    // e lotes disponíveis para o usuário.
+    // =====================================================
 
     if (!verificarSessao()) {
         return;

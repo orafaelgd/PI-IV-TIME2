@@ -30,12 +30,14 @@ import java.util.UUID;
 
 public class MovimentacoesService {
 
-    // CONFIGURAÇÕES
+    // =====================================================
+    // CONFIGURAÇÕES DAS MOVIMENTAÇÕES
+    // Define o fuso horário utilizado nas datas e os
+    // motivos permitidos para o registro de saídas.
+    // =====================================================
 
     private static final ZoneId FUSO =
         ZoneId.of("America/Sao_Paulo");
-
-    // MOTIVOS PERMITIDOS
 
     private static final Set<String> MOTIVOS = Set.of(
         "consumido",
@@ -45,7 +47,12 @@ public class MovimentacoesService {
         "outro"
     );
 
-    // CONEXÃO E COLEÇÕES
+    // =====================================================
+    // CONEXÃO E COLEÇÕES DO MONGODB
+    // Mantém as referências necessárias para consultar
+    // produtos e lotes, atualizar o estoque e registrar
+    // o histórico das movimentações.
+    // =====================================================
 
     private final MongoClient cliente;
 
@@ -55,7 +62,12 @@ public class MovimentacoesService {
 
     private final MongoCollection<Document> produtos;
 
+    // =====================================================
     // CONSTRUTOR
+    // Recebe a conexão e as coleções disponibilizadas
+    // pelo Controller, permitindo que o Service execute
+    // as operações relacionadas ao estoque.
+    // =====================================================
 
     public MovimentacoesService(
         MongoClient cliente,
@@ -70,7 +82,12 @@ public class MovimentacoesService {
         this.produtos = produtos;
     }
 
+    // =====================================================
     // CLASSE DE RESULTADO
+    // Padroniza o retorno das operações, informando
+    // ao Controller o código HTTP e a mensagem que
+    // deverão ser apresentados ao frontend.
+    // =====================================================
 
     public static class Resultado {
 
@@ -95,14 +112,23 @@ public class MovimentacoesService {
         }
     }
 
-    // REGISTRAR SAÍDA
+    // =====================================================
+    // REGISTRO DE SAÍDA DE PRODUTOS
+    // Recebe os dados enviados pelo Controller, valida
+    // as informações da movimentação e realiza a baixa
+    // no estoque associada ao usuário autenticado.
+    // =====================================================
 
     public Resultado registrarSaida(
         Document dados,
         ObjectId usuarioId
     ) {
 
-        // VALIDAR USUÁRIO AUTENTICADO
+        // =================================================
+        // VALIDAÇÃO DO USUÁRIO E DOS DADOS RECEBIDOS
+        // Impede operações sem identificação da conta
+        // ou sem as informações necessárias para a saída.
+        // =================================================
 
         if (usuarioId == null) {
 
@@ -111,8 +137,6 @@ public class MovimentacoesService {
             );
         }
 
-        // VALIDAR JSON
-
         if (dados == null) {
 
             throw new IllegalArgumentException(
@@ -120,7 +144,12 @@ public class MovimentacoesService {
             );
         }
 
-        // IDENTIFICAR PRODUTO E LOTE
+        // =================================================
+        // IDENTIFICAÇÃO DO PRODUTO E DO LOTE
+        // Recupera os identificadores recebidos no JSON
+        // e verifica se possuem o formato ObjectId
+        // utilizado pelo MongoDB.
+        // =================================================
 
         String itemTexto =
             texto(dados, "itemId");
@@ -144,7 +173,12 @@ public class MovimentacoesService {
         ObjectId loteId =
             new ObjectId(loteTexto);
 
-        // VALIDAR QUANTIDADE
+        // =================================================
+        // VALIDAÇÃO DA QUANTIDADE DE SAÍDA
+        // Converte a quantidade informada para BigDecimal,
+        // exige um valor positivo e verifica se pode ser
+        // representado no formato Decimal128 do MongoDB.
+        // =================================================
 
         BigDecimal quantidade;
 
@@ -169,8 +203,6 @@ public class MovimentacoesService {
             );
         }
 
-        // VERIFICAR COMPATIBILIDADE COM DECIMAL128
-
         try {
 
             new Decimal128(quantidade);
@@ -182,7 +214,12 @@ public class MovimentacoesService {
             );
         }
 
-        // VALIDAR DATA
+        // =================================================
+        // VALIDAÇÃO DA DATA DA MOVIMENTAÇÃO
+        // Converte a data informada e impede o registro
+        // de saídas com datas posteriores ao dia atual,
+        // considerando o fuso horário do sistema.
+        // =================================================
 
         LocalDate data;
 
@@ -206,7 +243,12 @@ public class MovimentacoesService {
             );
         }
 
-        // VALIDAR MOTIVO
+        // =================================================
+        // VALIDAÇÃO DO MOTIVO E DA OBSERVAÇÃO
+        // Verifica se o motivo selecionado pertence às
+        // opções permitidas e se a observação foi preenchida
+        // respeitando o limite de caracteres.
+        // =================================================
 
         String motivo = texto(
             dados,
@@ -219,8 +261,6 @@ public class MovimentacoesService {
                 "Motivo inválido."
             );
         }
-
-        // VALIDAR OBSERVAÇÃO
 
         String observacao = texto(
             dados,
@@ -237,10 +277,13 @@ public class MovimentacoesService {
             );
         }
 
-        // VALIDAR CHAVE DE IDEMPOTÊNCIA
-
-        // A MESMA OPERAÇÃO DEVE REUTILIZAR
-        // A MESMA CHAVE EM CASO DE REENVIO
+        // =================================================
+        // VALIDAÇÃO DA CHAVE DE IDEMPOTÊNCIA
+        // Identifica de forma única cada operação.
+        // Caso uma requisição precise ser reenviada,
+        // a mesma chave deverá ser reutilizada para
+        // evitar uma segunda baixa no estoque.
+        // =================================================
 
         String chave;
 
@@ -260,7 +303,12 @@ public class MovimentacoesService {
             );
         }
 
-        // DEFINIR TIPO DA MOVIMENTAÇÃO
+        // =================================================
+        // CLASSIFICAÇÃO DA MOVIMENTAÇÃO
+        // Relaciona o motivo selecionado no formulário
+        // ao tipo de movimentação armazenado no banco,
+        // diferenciando consumo, vencimento e ajustes.
+        // =================================================
 
         String tipo;
         String motivoFormatado;
@@ -298,14 +346,18 @@ public class MovimentacoesService {
                 break;
         }
 
-        // CONVERTER DATA
+        // =================================================
+        // CONVERSÃO DOS VALORES PARA O MONGODB
+        // Prepara a data no fuso de São Paulo e converte
+        // a quantidade para Decimal128.
+        // A quantidade negativa será utilizada para
+        // diminuir o saldo do lote selecionado.
+        // =================================================
 
         Date dataMovimentacao = Date.from(
             data.atStartOfDay(FUSO)
                 .toInstant()
         );
-
-        // CONVERTER QUANTIDADE
 
         Decimal128 quantidadeDecimal =
             new Decimal128(quantidade);
@@ -315,7 +367,13 @@ public class MovimentacoesService {
                 quantidade.negate()
             );
 
-        // GERAR ASSINATURA DA OPERAÇÃO
+        // =================================================
+        // GERAÇÃO DA ASSINATURA DA OPERAÇÃO
+        // Cria uma identificação baseada nos dados
+        // da movimentação e no usuário autenticado.
+        // Essa assinatura permite verificar se uma
+        // chave foi reutilizada com os mesmos dados.
+        // =================================================
 
         String assinatura = gerarAssinatura(
             itemId,
@@ -327,7 +385,13 @@ public class MovimentacoesService {
             usuarioId
         );
 
-        // VERIFICAR OPERAÇÃO JÁ REGISTRADA
+        // =================================================
+        // VERIFICAÇÃO DE OPERAÇÕES JÁ REGISTRADAS
+        // Consulta a chave de idempotência antes de
+        // iniciar uma nova baixa.
+        // Caso a operação já exista, retorna o resultado
+        // correspondente sem descontar o estoque novamente.
+        // =================================================
 
         try {
 
@@ -361,10 +425,13 @@ public class MovimentacoesService {
             );
         }
 
-        // INICIAR TRANSAÇÃO
-
-        // A BAIXA NO ESTOQUE E O HISTÓRICO
-        // DEVEM SER CONFIRMADOS JUNTOS
+        // =====================================================
+        // TRANSAÇÃO DO MONGODB
+        // Executa a atualização do estoque e o registro
+        // do histórico como uma única operação.
+        // Se alguma etapa falhar, a transação poderá ser
+        // cancelada para evitar inconsistências nos dados.
+        // =====================================================
 
         try (
             ClientSession sessao =
@@ -375,7 +442,11 @@ public class MovimentacoesService {
 
             try {
 
-                // VERIFICAR PRODUTO DA CONTA
+                // =============================================
+                // VERIFICAÇÃO DO PRODUTO
+                // Confirma que o produto existe, está ativo
+                // e pertence à conta do usuário autenticado.
+                // =============================================
 
                 Document produto = produtos.find(
                     sessao,
@@ -405,12 +476,13 @@ public class MovimentacoesService {
                     );
                 }
 
-                // VERIFICAR LOTE DA CONTA
-
-                // CONFIRMAR QUE O LOTE:
-                // PERTENCE AO PRODUTO E AO USUÁRIO
-                // NÃO ESTÁ INATIVO OU ARQUIVADO
-                // POSSUI SALDO SUFICIENTE
+                // =============================================
+                // VERIFICAÇÃO DO LOTE E DO SALDO
+                // Garante que o lote pertence ao produto
+                // e ao usuário autenticado, não está
+                // arquivado ou inativo e possui saldo
+                // suficiente para a quantidade solicitada.
+                // =============================================
 
                 UpdateResult atualizacao =
                     lotes.updateOne(
@@ -447,7 +519,12 @@ public class MovimentacoesService {
                         )
                     );
 
-                // VERIFICAR RESULTADO DA ATUALIZAÇÃO
+                // =============================================
+                // CONFIRMAÇÃO DA BAIXA NO ESTOQUE
+                // Verifica se exatamente um lote foi alterado.
+                // Caso contrário, cancela a transação e
+                // informa que a saída não foi registrada.
+                // =============================================
 
                 if (
                     atualizacao.getModifiedCount() != 1
@@ -461,7 +538,12 @@ public class MovimentacoesService {
                     );
                 }
 
-                // CRIAR MOVIMENTAÇÃO
+                // =============================================
+                // PREPARAÇÃO DO HISTÓRICO DA MOVIMENTAÇÃO
+                // Organiza os dados que serão armazenados,
+                // incluindo produto, lote, quantidade, motivo,
+                // usuário e identificadores da operação.
+                // =============================================
 
                 Document movimentacao =
                     new Document()
@@ -514,14 +596,23 @@ public class MovimentacoesService {
                             assinatura
                         );
 
-                // REGISTRAR HISTÓRICO NO MONGODB
+                // =============================================
+                // REGISTRO DO HISTÓRICO
+                // Insere a movimentação no MongoDB utilizando
+                // a mesma sessão da atualização do estoque.
+                // =============================================
 
                 movimentacoes.insertOne(
                     sessao,
                     movimentacao
                 );
 
-                // CONFIRMAR TRANSAÇÃO
+                // =============================================
+                // CONFIRMAÇÃO DA TRANSAÇÃO
+                // Finaliza a operação somente depois da
+                // atualização do lote e do registro
+                // da movimentação.
+                // =============================================
 
                 sessao.commitTransaction();
 
@@ -532,7 +623,12 @@ public class MovimentacoesService {
 
             } catch (MongoException erro) {
 
-                // TENTAR CANCELAR TRANSAÇÃO ATIVA
+                // =============================================
+                // TRATAMENTO DE FALHAS NA TRANSAÇÃO
+                // Tenta cancelar a transação, caso permaneça
+                // ativa, e verifica se a operação chegou
+                // a ser registrada no banco de dados.
+                // =============================================
 
                 if (sessao.hasActiveTransaction()) {
 
@@ -542,11 +638,17 @@ public class MovimentacoesService {
 
                     } catch (Exception ignorado) {
 
-                        // CONFERIR A OPERAÇÃO PELA CHAVE
+                        // O resultado da operação será
+                        // verificado pela chave de idempotência.
                     }
                 }
 
-                // CONFERIR SE A OPERAÇÃO FOI REGISTRADA
+                // =============================================
+                // VERIFICAÇÃO APÓS FALHA
+                // Consulta a movimentação pela chave para
+                // identificar operações que possam ter sido
+                // confirmadas antes da perda de comunicação.
+                // =============================================
 
                 try {
 
@@ -588,6 +690,13 @@ public class MovimentacoesService {
 
         } catch (MongoException erro) {
 
+            // =================================================
+            // TRATAMENTO DE FALHAS DE CONEXÃO
+            // Informa que não foi possível confirmar
+            // a operação quando ocorre um erro no acesso
+            // ao MongoDB ou na criação da sessão.
+            // =================================================
+
             System.err.println(
                 "Erro de conexão na movimentação: " +
                 erro.getMessage()
@@ -600,7 +709,13 @@ public class MovimentacoesService {
         }
     }
 
-    // VERIFICAR OPERAÇÃO REPETIDA
+    // =====================================================
+    // VERIFICAÇÃO DE OPERAÇÕES REPETIDAS
+    // Confirma que a chave de idempotência pertence
+    // ao usuário autenticado e compara a assinatura
+    // para distinguir um reenvio legítimo de uma
+    // tentativa de utilizar a chave em outra operação.
+    // =====================================================
 
     private Resultado verificarRepeticao(
         Document existente,
@@ -608,7 +723,7 @@ public class MovimentacoesService {
         ObjectId usuarioId
     ) {
 
-        // CONFIRMAR PROPRIETÁRIO DA CHAVE
+        // Verifica se a operação pertence à mesma conta.
 
         if (
             !usuarioId.equals(
@@ -622,7 +737,8 @@ public class MovimentacoesService {
             );
         }
 
-        // MESMA OPERAÇÃO
+        // Se os dados são idênticos, confirma a operação
+        // anterior sem realizar uma segunda baixa.
 
         if (
             assinatura.equals(
@@ -638,7 +754,7 @@ public class MovimentacoesService {
             );
         }
 
-        // CHAVE UTILIZADA EM OUTRA OPERAÇÃO
+        // Impede o uso da mesma chave para dados diferentes.
 
         return new Resultado(
             409,
@@ -646,7 +762,12 @@ public class MovimentacoesService {
         );
     }
 
-    // GERAR ASSINATURA SHA-256
+    // =====================================================
+    // GERAÇÃO DA ASSINATURA SHA-256
+    // Organiza os dados da movimentação em um documento
+    // padronizado e gera um hash para identificar
+    // o conteúdo associado à chave de idempotência.
+    // =====================================================
 
     private static String gerarAssinatura(
         ObjectId itemId,
@@ -658,7 +779,8 @@ public class MovimentacoesService {
         ObjectId usuarioId
     ) {
 
-        // NORMALIZAR DADOS DA OPERAÇÃO
+        // Normaliza os dados para que operações equivalentes
+        // produzam a mesma assinatura.
 
         Document dadosCanonicos =
             new Document()
@@ -718,7 +840,12 @@ public class MovimentacoesService {
         }
     }
 
-    // RECUPERAR CAMPO DE TEXTO
+    // =====================================================
+    // RECUPERAÇÃO DE CAMPOS DE TEXTO
+    // Obtém os valores recebidos no documento JSON,
+    // remove espaços nas extremidades e retorna
+    // uma string vazia quando o campo não é texto.
+    // =====================================================
 
     private static String texto(
         Document dados,

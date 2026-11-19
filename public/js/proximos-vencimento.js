@@ -1,52 +1,45 @@
-// PRÓXIMOS DO VENCIMENTO
-// AUTENTICAÇÃO, TABELA PADRONIZADA E PESQUISA
 
 document.addEventListener("DOMContentLoaded", () => {
-  // CONFIGURAÇÕES
+
+  // =====================================================
+  // CONFIGURAÇÕES E ELEMENTOS DA INTERFACE
+  // Define o endereço da API, a página de login,
+  // os períodos disponíveis e os elementos utilizados
+  // para apresentar e consultar os lotes.
+  // =====================================================
 
   const API_URL = "http://localhost:8081/api/lotes/proximos-vencimento";
-
   const PAGINA_LOGIN = "login-usuario.html";
-
   const PERIODOS_VALIDOS = [1, 3, 7, 15, 30];
 
-  // ELEMENTOS DA TELA
-
   const botoes = document.querySelectorAll("[data-dias]");
-
   const tabela = document.getElementById("lista-vencimentos");
-
   const mensagem = document.getElementById("mensagem-vencimentos");
-
   const campoPesquisa = document.getElementById("pesquisaProduto");
-
-  // VARIÁVEIS
 
   let requisicaoAtual = null;
   let modalAberto = null;
-
-  // LOTES DO PERÍODO SELECIONADO
-
   let lotesCarregados = [];
-
   let carregando = false;
   let erroCarregamento = false;
 
-  // VALIDAR ELEMENTOS
+  // Confirma que os elementos necessários existem na página.
 
   if (!tabela || !mensagem || !campoPesquisa) {
     console.error("Elementos da tela de vencimentos não encontrados.");
-
     return;
   }
 
-  // AUTENTICAÇÃO
+  // =====================================================
+  // AUTENTICAÇÃO E CONTROLE DE ACESSO
+  // Recupera o token da sessão e o envia nas consultas.
+  // Caso a sessão seja inexistente ou expire, remove
+  // os dados locais e redireciona para o login.
+  // =====================================================
 
   function obterToken() {
     return sessionStorage.getItem("token");
   }
-
-  // ENCERRAR SESSÃO
 
   function encerrarAcesso() {
     sessionStorage.removeItem("token");
@@ -55,40 +48,28 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.replace(PAGINA_LOGIN);
   }
 
-  // REQUISIÇÃO AUTENTICADA
-
   async function requisicaoAutenticada(url, sinal) {
     const token = obterToken();
 
     if (!token || !token.trim()) {
       encerrarAcesso();
-
       throw new Error("Sessão não encontrada.");
     }
 
-    // ENVIAR TOKEN DO USUÁRIO
-
     const resposta = await fetch(url, {
       method: "GET",
-
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       },
-
       signal: sinal,
       cache: "no-store",
     });
 
-    // SESSÃO EXPIRADA
-
     if (resposta.status === 401) {
       encerrarAcesso();
-
       throw new Error("Sessão inválida ou expirada.");
     }
-
-    // ACESSO NEGADO
 
     if (resposta.status === 403) {
       throw new Error("Você não tem permissão para acessar os lotes.");
@@ -97,11 +78,14 @@ document.addEventListener("DOMContentLoaded", () => {
     return resposta;
   }
 
-  // LER RESPOSTA DA API
+  // =====================================================
+  // LEITURA DAS RESPOSTAS DO BACKEND
+  // Converte o retorno da API para JSON e identifica
+  // possíveis erros informados pelo servidor.
+  // =====================================================
 
   async function lerResposta(resposta) {
     const texto = await resposta.text();
-
     let dados = {};
 
     if (texto) {
@@ -121,7 +105,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return dados;
   }
 
-  // FORMATAR DATA
+  // =====================================================
+  // FORMATAÇÃO DAS INFORMAÇÕES DOS LOTES
+  // Prepara datas e quantidades recebidas do backend
+  // para apresentação na tabela e no modal.
+  // Também calcula os dias restantes até o vencimento,
+  // considerando o fuso horário de São Paulo.
+  // =====================================================
 
   function formatarData(valor) {
     const data = String(valor || "").substring(0, 10);
@@ -135,14 +125,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${dia}/${mes}/${ano}`;
   }
 
-  // FORMATAR QUANTIDADE
-
   function formatarQuantidade(quantidade, unidade) {
     if (quantidade === null || quantidade === undefined || quantidade === "") {
       return "-";
     }
 
-    // COMPATIBILIDADE COM DECIMAL128
+    // Compatibilidade com valores Decimal128 do MongoDB.
 
     if (typeof quantidade === "object" && "$numberDecimal" in quantidade) {
       quantidade = quantidade.$numberDecimal;
@@ -161,8 +149,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${valor} ${unidade || ""}`.trim();
   }
 
-  // CALCULAR DIAS RESTANTES
-
   function calcularDiasRestantes(dataISO) {
     const data = String(dataISO || "").substring(0, 10);
 
@@ -173,8 +159,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const [ano, mes, dia] = data.split("-").map(Number);
 
     const destino = Date.UTC(ano, mes - 1, dia);
-
-    // DATA ATUAL NO FUSO DE SÃO PAULO
 
     const partes = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Sao_Paulo",
@@ -191,7 +175,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return Math.round((destino - hoje) / 86400000);
   }
 
-  // IDENTIFICAR SITUAÇÃO DO LOTE
+  // Classifica a situação do lote conforme a proximidade
+  // da data de validade, incluindo vencimentos anteriores.
 
   function obterSituacao(lote) {
     const dias = calcularDiasRestantes(lote.dataValidade);
@@ -215,21 +200,21 @@ document.addEventListener("DOMContentLoaded", () => {
     return `Vence em ${dias} dias`;
   }
 
-  // MENSAGENS DE ERRO
+  // =====================================================
+  // EXIBIÇÃO DE MENSAGENS E ELEMENTOS DA TABELA
+  // Controla os avisos de erro, os estados sem resultados
+  // e a criação das células utilizadas na listagem.
+  // =====================================================
 
   function mostrarErro(texto) {
     mensagem.textContent = texto;
-
     mensagem.classList.remove("hidden");
   }
 
   function limparErro() {
     mensagem.textContent = "";
-
     mensagem.classList.add("hidden");
   }
-
-  // MOSTRAR MENSAGEM NA TABELA
 
   function mostrarMensagemTabela(texto) {
     tabela.replaceChildren();
@@ -238,16 +223,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const celula = document.createElement("td");
 
     celula.colSpan = 5;
-
     celula.className = "px-3 py-6 text-center text-text-secondary";
-
     celula.textContent = texto;
 
     linha.appendChild(celula);
     tabela.appendChild(linha);
   }
-
-  // CRIAR CÉLULA
 
   function criarCelula(linha, texto, centralizar = false) {
     const celula = document.createElement("td");
@@ -263,8 +244,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return celula;
   }
 
-  // CRIAR TEXTO DO MODAL
-
   function criarTexto(tag, texto, classes) {
     const elemento = document.createElement(tag);
 
@@ -274,24 +253,30 @@ document.addEventListener("DOMContentLoaded", () => {
     return elemento;
   }
 
-  // MODAL DE DETALHES DO LOTE
+  // =====================================================
+  // MODAL DE DETALHES DOS LOTES
+  // Cria uma janela com informações do produto e do lote,
+  // incluindo quantidade, validade e situação atual.
+  // Permite fechar pelo botão, pela tecla Escape ou
+  // pelo clique fora da janela, preservando a navegação
+  // por teclado e o foco do usuário.
+  // =====================================================
 
   function abrirModalDetalhes(lote, botaoOrigem) {
-    // EVITAR DOIS MODAIS ABERTOS
+
+    // Impede a existência de dois modais simultâneos.
 
     if (modalAberto) {
       modalAberto.fechar();
     }
 
-    // FUNDO ESCURECIDO
+    // Criação do fundo escurecido e da janela.
 
     const overlay = document.createElement("div");
 
     overlay.className =
       "fixed inset-0 z-50 flex items-center " +
       "justify-center bg-black/50 p-4";
-
-    // JANELA DO MODAL
 
     const modal = document.createElement("section");
 
@@ -302,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
 
-    // TÍTULO E BOTÃO FECHAR
+    // Cabeçalho e identificação acessível do modal.
 
     const cabecalho = document.createElement("div");
 
@@ -329,15 +314,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     cabecalho.append(titulo, botaoX);
 
-    // DESCRIÇÃO
+    // Descrição e situação do vencimento.
 
     const descricao = criarTexto(
       "p",
       "Informações do lote próximo ao vencimento.",
       "mb-5 text-xs text-text-secondary",
     );
-
-    // SITUAÇÃO DO VENCIMENTO
 
     const situacao = obterSituacao(lote);
 
@@ -347,13 +330,13 @@ document.addEventListener("DOMContentLoaded", () => {
       "mb-4 text-sm font-semibold text-text",
     );
 
-    // ÁREA DAS INFORMAÇÕES
+    // Área que apresenta as informações cadastradas.
 
     const informacoes = document.createElement("div");
 
     informacoes.className = "rounded-md bg-[#e9ebee] px-4 py-2";
 
-    // ADICIONAR INFORMAÇÃO AO MODAL
+    // Cria cada campo de informação do modal.
 
     function adicionarCampo(rotulo, valor) {
       const linha = document.createElement("div");
@@ -371,11 +354,10 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       linha.append(nome, conteudo);
-
       informacoes.appendChild(linha);
     }
 
-    // DADOS DO LOTE
+    // Preenchimento das informações do lote selecionado.
 
     adicionarCampo("Produto", lote.produtoNome || "Produto sem nome");
 
@@ -390,7 +372,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     adicionarCampo("Situação", situacao);
 
-    // BOTÃO FECHAR
+    // Rodapé com botão de fechamento.
 
     const rodape = document.createElement("div");
 
@@ -407,20 +389,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     rodape.appendChild(botaoFechar);
 
-    // MONTAR MODAL
+    // Montagem do modal na página.
 
     modal.append(cabecalho, descricao, status, informacoes, rodape);
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // BLOQUEAR ROLAGEM DO FUNDO
+    // Impede a rolagem da página enquanto o modal estiver aberto.
 
     const overflowAnterior = document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
 
-    // FECHAR MODAL
+    // Remove o modal e devolve o foco ao botão de origem.
 
     function fechar() {
       document.removeEventListener("keydown", tratarTeclado);
@@ -436,15 +418,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // TRATAR TECLADO
+    // Controla a tecla Escape e a navegação por Tab
+    // para manter o foco dentro dos controles do modal.
 
     function tratarTeclado(evento) {
       if (evento.key === "Escape") {
         fechar();
         return;
       }
-
-      // MANTER FOCO NO MODAL
 
       if (evento.key === "Tab") {
         const primeiro = botaoX;
@@ -460,7 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // EVENTOS DO MODAL
+    // Eventos responsáveis pelo fechamento do modal.
 
     botaoX.addEventListener("click", fechar);
     botaoFechar.addEventListener("click", fechar);
@@ -478,24 +459,21 @@ document.addEventListener("DOMContentLoaded", () => {
     botaoX.focus();
   }
 
-  // CRIAR LINHA DA TABELA
+  // =====================================================
+  // CONSTRUÇÃO DAS LINHAS DA TABELA
+  // Cria os elementos visuais para apresentar cada lote,
+  // incluindo produto, código, saldo, validade e botão
+  // de acesso ao modal de detalhes.
+  // =====================================================
 
   function criarLinha(lote) {
     const linha = document.createElement("tr");
 
-    // ESTILO IGUAL À TABELA DE TODOS OS LOTES
-
     linha.className = "border-b border-gray-300 bg-[#e9ebee] text-text";
-
-    // PRODUTO
 
     criarCelula(linha, lote.produtoNome || "Produto não encontrado");
 
-    // CÓDIGO DO LOTE
-
     criarCelula(linha, lote.codigo || "-");
-
-    // QUANTIDADE DISPONÍVEL
 
     criarCelula(
       linha,
@@ -503,11 +481,9 @@ document.addEventListener("DOMContentLoaded", () => {
       true,
     );
 
-    // VALIDADE
-
     criarCelula(linha, formatarData(lote.dataValidade), true);
 
-    // AÇÕES
+    // Criação do botão que abre os detalhes do lote.
 
     const celulaAcoes = document.createElement("td");
 
@@ -516,8 +492,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const grupo = document.createElement("div");
 
     grupo.className = "flex items-center justify-center";
-
-    // BOTÃO DE DETALHES
 
     const detalhes = document.createElement("button");
 
@@ -546,9 +520,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return linha;
   }
 
-  // NORMALIZAR TEXTO DA PESQUISA
-
-  // IGNORA ACENTOS E LETRAS MAIÚSCULAS
+  // =====================================================
+  // PESQUISA DE PRODUTOS NA TABELA
+  // Filtra os lotes já carregados de acordo com o nome
+  // digitado pelo usuário, desconsiderando diferenças
+  // entre letras maiúsculas, minúsculas e acentuação.
+  // =====================================================
 
   function normalizarTexto(texto) {
     return String(texto || "")
@@ -558,20 +535,16 @@ document.addEventListener("DOMContentLoaded", () => {
       .trim();
   }
 
-  // PESQUISAR PRODUTOS PELO NOME
-
   function filtrarProdutos() {
-    // EVITAR ALTERAR A TABELA DURANTE O CARREGAMENTO
+
+    // Evita modificar a tabela durante o carregamento
+    // dos dados ou após uma falha na consulta.
 
     if (carregando || erroCarregamento) {
       return;
     }
 
-    // RECUPERAR O TEXTO PESQUISADO
-
     const pesquisa = normalizarTexto(campoPesquisa.value);
-
-    // FILTRAR OS LOTES RETORNADOS PELA API
 
     const lotesFiltrados = lotesCarregados.filter((lote) => {
       const nomeProduto = normalizarTexto(lote.produtoNome);
@@ -579,11 +552,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return nomeProduto.includes(pesquisa);
     });
 
-    // LIMPAR TABELA
-
     tabela.replaceChildren();
 
-    // NENHUM RESULTADO
+    // Apresenta mensagem quando a pesquisa não retorna lotes.
 
     if (lotesFiltrados.length === 0) {
       mostrarMensagemTabela(
@@ -595,7 +566,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // PREENCHER TABELA COM RESULTADOS FILTRADOS
+    // Atualiza a tabela com os produtos correspondentes.
 
     const fragmento = document.createDocumentFragment();
 
@@ -606,13 +577,15 @@ document.addEventListener("DOMContentLoaded", () => {
     tabela.appendChild(fragmento);
   }
 
-  // EVENTO DA BARRA DE PESQUISA
-
-  // FILTRA AUTOMATICAMENTE ENQUANTO DIGITA
+  // Atualiza a pesquisa automaticamente enquanto o usuário digita.
 
   campoPesquisa.addEventListener("input", filtrarProdutos);
 
-  // ATUALIZAR BOTÕES DOS FILTROS
+  // =====================================================
+  // CONTROLE VISUAL DOS FILTROS DE VENCIMENTO
+  // Atualiza a aparência do botão selecionado,
+  // indicando o período de consulta ativo.
+  // =====================================================
 
   function selecionarFiltro(botaoAtivo) {
     botoes.forEach((botao) => {
@@ -630,10 +603,18 @@ document.addEventListener("DOMContentLoaded", () => {
     botaoAtivo.setAttribute("aria-pressed", "true");
   }
 
-  // CARREGAR LOTES AUTENTICADOS
+  // =====================================================
+  // CARREGAMENTO DOS LOTES PELO BACKEND
+  // Consulta os lotes do período selecionado utilizando
+  // o token de autenticação, controla carregamentos,
+  // cancela requisições anteriores e apresenta
+  // mensagens de erro ou ausência de resultados.
+  // =====================================================
 
   async function carregarLotes(dias) {
-    // CANCELAR REQUISIÇÃO ANTERIOR
+
+    // Cancela uma consulta anterior caso o usuário
+    // selecione outro período antes de sua conclusão.
 
     if (requisicaoAtual) {
       requisicaoAtual.abort();
@@ -643,13 +624,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     requisicaoAtual = controlador;
 
-    // FECHAR MODAL ABERTO
-
     if (modalAberto) {
       modalAberto.fechar();
     }
 
-    // LIMPAR DADOS ANTERIORES
+    // Reinicia os dados e apresenta o estado de carregamento.
 
     lotesCarregados = [];
 
@@ -661,7 +640,8 @@ document.addEventListener("DOMContentLoaded", () => {
     mostrarMensagemTabela("Carregando lotes...");
 
     try {
-      // CONSULTAR API COM TOKEN DE AUTENTICAÇÃO
+
+      // Consulta o backend com o período selecionado.
 
       const resposta = await requisicaoAutenticada(
         `${API_URL}?dias=${dias}`,
@@ -670,31 +650,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const dados = await lerResposta(resposta);
 
-      // IGNORAR REQUISIÇÕES CANCELADAS
-
       if (controlador.signal.aborted) {
         return;
       }
 
-      // VALIDAR DADOS
+      // Confere o formato recebido e armazena os lotes.
 
       if (!Array.isArray(dados.lotes)) {
         throw new Error("Resposta inválida do servidor.");
       }
 
-      // ARMAZENAR OS LOTES DO PERÍODO
-
       lotesCarregados = dados.lotes;
-
-      // FINALIZAR CARREGAMENTO
 
       carregando = false;
 
-      // APLICAR PESQUISA ATUAL
+      // Aplica a pesquisa atual aos registros carregados.
 
       filtrarProdutos();
+
     } catch (erro) {
-      // IGNORAR REQUISIÇÃO CANCELADA
+
+      // Ignora cancelamentos intencionais de requisições.
 
       if (erro.name === "AbortError" || controlador.signal.aborted) {
         return;
@@ -708,9 +684,11 @@ document.addEventListener("DOMContentLoaded", () => {
       mostrarMensagemTabela("Não foi possível carregar os lotes.");
 
       mostrarErro(erro.message);
+
     } finally {
-      // SOMENTE A REQUISIÇÃO MAIS RECENTE
-      // PODE ALTERAR O ESTADO DO CARREGAMENTO
+
+      // Somente a requisição mais recente pode atualizar
+      // o estado de carregamento da interface.
 
       if (requisicaoAtual === controlador) {
         carregando = false;
@@ -719,13 +697,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // EVENTOS DOS CINCO FILTROS
+  // =====================================================
+  // EVENTOS DOS FILTROS DE VENCIMENTO
+  // Associa cada botão ao período correspondente e
+  // atualiza a listagem quando o usuário seleciona
+  // um dos cinco intervalos disponíveis.
+  // =====================================================
 
   botoes.forEach((botao) => {
     botao.addEventListener("click", () => {
       const dias = Number(botao.dataset.dias);
-
-      // ACEITAR 1, 3, 7, 15 E 30 DIAS
 
       if (!PERIODOS_VALIDOS.includes(dias)) {
         return;
@@ -737,16 +718,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // INICIALIZAÇÃO
-
-  // VERIFICAR SESSÃO
+  // =====================================================
+  // INICIALIZAÇÃO DA TELA
+  // Confirma a existência do token e realiza a primeira
+  // consulta utilizando o filtro de vencimento de hoje.
+  // =====================================================
 
   if (!obterToken()) {
     encerrarAcesso();
     return;
   }
-
-  // INICIAR COM FILTRO HOJE
 
   const filtroInicial = document.querySelector('[data-dias="1"]');
 
