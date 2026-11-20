@@ -1,43 +1,171 @@
+
 document.addEventListener("DOMContentLoaded", () => {
+
+  // =====================================================
+  // CONFIGURAÇÕES E ELEMENTOS DA INTERFACE
+  // Define o endereço da API, a página de login,
+  // os períodos disponíveis e os elementos utilizados
+  // para apresentar e consultar os lotes.
+  // =====================================================
+
   const API_URL = "http://localhost:8081/api/lotes/proximos-vencimento";
+  const PAGINA_LOGIN = "login-usuario.html";
+  const PERIODOS_VALIDOS = [1, 3, 7, 15, 30];
 
   const botoes = document.querySelectorAll("[data-dias]");
-  const lista = document.getElementById("lista-vencimentos");
+  const tabela = document.getElementById("lista-vencimentos");
   const mensagem = document.getElementById("mensagem-vencimentos");
+  const campoPesquisa = document.getElementById("pesquisaProduto");
 
   let requisicaoAtual = null;
   let modalAberto = null;
+  let lotesCarregados = [];
+  let carregando = false;
+  let erroCarregamento = false;
 
-  // Formata uma data ISO para o formato brasileiro
-  function formatarData(dataISO) {
-    const data = String(dataISO || "").substring(0, 10);
+  // CONFIRMAR ELEMENTOS DA PÁGINA
+
+  if (!tabela || !mensagem || !campoPesquisa) {
+    console.error("Elementos da tela de vencimentos não encontrados.");
+    return;
+  }
+
+  // =====================================================
+  // AUTENTICAÇÃO E CONTROLE DE ACESSO
+  // Recupera o token da sessão e o envia nas consultas.
+  // Caso a sessão seja inexistente ou expire, remove
+  // os dados locais e redireciona para o login.
+  // =====================================================
+
+  function obterToken() {
+    return sessionStorage.getItem("token");
+  }
+
+  function encerrarAcesso() {
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("usuario");
+
+    window.location.replace(PAGINA_LOGIN);
+  }
+
+  async function requisicaoAutenticada(url, sinal) {
+    const token = obterToken();
+
+    if (!token || !token.trim()) {
+      encerrarAcesso();
+      throw new Error("Sessão não encontrada.");
+    }
+
+    const resposta = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal: sinal,
+      cache: "no-store",
+    });
+
+    if (resposta.status === 401) {
+      encerrarAcesso();
+      throw new Error("Sessão inválida ou expirada.");
+    }
+
+    if (resposta.status === 403) {
+      throw new Error("Você não tem permissão para acessar os lotes.");
+    }
+
+    return resposta;
+  }
+
+  // =====================================================
+  // LEITURA DAS RESPOSTAS DO BACKEND
+  // Converte o retorno da API para JSON e identifica
+  // possíveis erros informados pelo servidor.
+  // =====================================================
+
+  async function lerResposta(resposta) {
+    const texto = await resposta.text();
+    let dados = {};
+
+    if (texto) {
+      try {
+        dados = JSON.parse(texto);
+      } catch {
+        throw new Error("Resposta inválida do servidor.");
+      }
+    }
+
+    if (!resposta.ok) {
+      throw new Error(
+        dados.mensagem || dados.erro || `Erro HTTP ${resposta.status}`,
+      );
+    }
+
+    return dados;
+  }
+
+  // =====================================================
+  // FORMATAÇÃO DAS INFORMAÇÕES DOS LOTES
+  // Prepara datas e quantidades recebidas do backend
+  // para apresentação na tabela e no modal.
+  // Também calcula os dias restantes até o vencimento,
+  // considerando o fuso horário de São Paulo.
+  // =====================================================
+
+  // FORMATAR DATA
+
+  function formatarData(valor) {
+    const data = String(valor || "").substring(0, 10);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
       return "-";
     }
 
     const [ano, mes, dia] = data.split("-");
+
     return `${dia}/${mes}/${ano}`;
   }
 
-  // Formata a quantidade com a unidade do produto
-  function formatarQuantidade(quantidade, unidade) {
+  // FORMATAR QUANTIDADE DISPONÍVEL
+  // EXIBIR SOMENTE O VALOR NUMÉRICO
+  // SEM G, KG, L, ML OU UN
+
+  function formatarQuantidade(quantidade) {
+    if (
+      quantidade === null ||
+      quantidade === undefined ||
+      quantidade === ""
+    ) {
+      return "-";
+    }
+
+    // COMPATIBILIDADE COM DECIMAL128 DO MONGODB
+
+    if (
+      typeof quantidade === "object" &&
+      "$numberDecimal" in quantidade
+    ) {
+      quantidade = quantidade.$numberDecimal;
+    }
+
     const numero = Number(quantidade);
 
     if (!Number.isFinite(numero)) {
       return "-";
     }
 
-    return (
-      new Intl.NumberFormat("pt-BR", {
-        maximumFractionDigits: 6,
-      }).format(numero) +
-      " " +
-      (unidade || "")
-    );
+    // RETORNAR SOMENTE O NÚMERO FORMATADO
+
+    const valor = numero.toLocaleString("pt-BR", {
+      maximumFractionDigits: 6,
+    });
+
+    return valor;
   }
 
-  // Calcula os dias restantes usando o horário de São Paulo
+  // CALCULAR DIAS RESTANTES
+
   function calcularDiasRestantes(dataISO) {
     const data = String(dataISO || "").substring(0, 10);
 
@@ -49,6 +177,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const destino = Date.UTC(ano, mes - 1, dia);
 
+    // DATA ATUAL NO FUSO DE SÃO PAULO
+
     const partes = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Sao_Paulo",
       year: "numeric",
@@ -59,243 +189,308 @@ document.addEventListener("DOMContentLoaded", () => {
     const obter = (tipo) =>
       Number(partes.find((parte) => parte.type === tipo).value);
 
-    const hoje = Date.UTC(obter("year"), obter("month") - 1, obter("day"));
+    const hoje = Date.UTC(
+      obter("year"),
+      obter("month") - 1,
+      obter("day")
+    );
 
-    return Math.round((destino - hoje) / (24 * 60 * 60 * 1000));
+    return Math.round((destino - hoje) / 86400000);
   }
 
-  // Exibe mensagens de carregamento e erro
-  function mostrarMensagem(texto) {
+  // IDENTIFICAR SITUAÇÃO DO LOTE
+  // CONSIDERANDO A DATA DE VALIDADE
+
+  function obterSituacao(lote) {
+    const dias = calcularDiasRestantes(lote.dataValidade);
+
+    if (dias === null) {
+      return "Data não disponível";
+    }
+
+    if (dias < 0) {
+      return `Vencido há ${Math.abs(dias)} dia(s)`;
+    }
+
+    if (dias === 0) {
+      return "Vence hoje";
+    }
+
+    if (dias === 1) {
+      return "Vence amanhã";
+    }
+
+    return `Vence em ${dias} dias`;
+  }
+
+  // =====================================================
+  // EXIBIÇÃO DE MENSAGENS E ELEMENTOS DA TABELA
+  // Controla os avisos de erro, os estados sem resultados
+  // e a criação das células utilizadas na listagem.
+  // =====================================================
+
+  // MOSTRAR ERRO
+
+  function mostrarErro(texto) {
     mensagem.textContent = texto;
     mensagem.classList.remove("hidden");
-    mensagem.hidden = false;
   }
 
-  function esconderMensagem() {
+  // LIMPAR ERRO
+
+  function limparErro() {
+    mensagem.textContent = "";
     mensagem.classList.add("hidden");
-    mensagem.hidden = true;
   }
 
-  // Cria elementos de texto para o modal
-  function criarTexto(tag, texto, estilos = {}) {
+  // MOSTRAR MENSAGEM NA TABELA
+
+  function mostrarMensagemTabela(texto) {
+    tabela.replaceChildren();
+
+    const linha = document.createElement("tr");
+    const celula = document.createElement("td");
+
+    celula.colSpan = 5;
+    celula.className =
+      "px-3 py-6 text-center text-text-secondary";
+
+    celula.textContent = texto;
+
+    linha.appendChild(celula);
+    tabela.appendChild(linha);
+  }
+
+  // CRIAR CÉLULA
+
+  function criarCelula(linha, texto, centralizar = false) {
+    const celula = document.createElement("td");
+
+    celula.className = centralizar
+      ? "px-3 py-3 text-center font-semibold"
+      : "px-3 py-3 font-semibold";
+
+    celula.textContent = texto ?? "-";
+
+    linha.appendChild(celula);
+
+    return celula;
+  }
+
+  // CRIAR ELEMENTO DE TEXTO
+
+  function criarTexto(tag, texto, classes) {
     const elemento = document.createElement(tag);
+
     elemento.textContent = texto;
-    Object.assign(elemento.style, estilos);
+    elemento.className = classes;
+
     return elemento;
   }
 
-  // Abre o modal de detalhes do lote
+  // =====================================================
+  // MODAL DE DETALHES DOS LOTES
+  // Cria uma janela com informações do produto e do lote,
+  // incluindo quantidade, validade e situação atual.
+  // Permite fechar pelo botão, pela tecla Escape ou
+  // pelo clique fora da janela, preservando a navegação
+  // por teclado e o foco do usuário.
+  // =====================================================
+
   function abrirModalDetalhes(lote, botaoOrigem) {
-    // Impede que dois modais fiquem abertos.
+
+    // IMPEDIR DOIS MODAIS ABERTOS
+
     if (modalAberto) {
       modalAberto.fechar();
     }
 
-    const diasRestantes = calcularDiasRestantes(lote.dataValidade);
+    // CRIAR FUNDO ESCURECIDO
 
-    let situacao = "Data não disponível";
-    let corSituacao = "#64748b";
-    let fundoSituacao = "#f1f5f9";
-
-    if (diasRestantes !== null) {
-      if (diasRestantes < 0) {
-        situacao = `Vencido há ${Math.abs(diasRestantes)} dia(s)`;
-        corSituacao = "#b91c1c";
-        fundoSituacao = "#fee2e2";
-      } else if (diasRestantes === 0) {
-        situacao = "Vence hoje";
-        corSituacao = "#b91c1c";
-        fundoSituacao = "#fee2e2";
-      } else if (diasRestantes <= 3) {
-        situacao = `Vence em ${diasRestantes} dia(s)`;
-        corSituacao = "#92400e";
-        fundoSituacao = "#fef3c7";
-      } else {
-        situacao = `Vence em ${diasRestantes} dia(s)`;
-        corSituacao = "#166534";
-        fundoSituacao = "#dcfce7";
-      }
-    }
-
-    // Fundo escurecido
     const overlay = document.createElement("div");
 
-    Object.assign(overlay.style, {
-      position: "fixed",
-      inset: "0",
-      backgroundColor: "rgba(15, 23, 42, 0.55)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "20px",
-      zIndex: "9999",
-    });
+    overlay.className =
+      "fixed inset-0 z-50 flex items-center " +
+      "justify-center bg-black/50 p-4";
 
-    // Janela central
+    // CRIAR JANELA DO MODAL
+
     const modal = document.createElement("section");
+
+    modal.className =
+      "w-full max-w-[480px] max-h-[90vh] " +
+      "overflow-y-auto rounded-lg bg-white p-6 shadow-lg";
+
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
 
-    Object.assign(modal.style, {
-      backgroundColor: "#ffffff",
-      width: "100%",
-      maxWidth: "480px",
-      borderRadius: "12px",
-      padding: "28px",
-      boxShadow: "0 20px 50px rgba(0, 0, 0, 0.2)",
-      position: "relative",
-      maxHeight: "90vh",
-      overflowY: "auto",
-      color: "#1f2937",
-    });
+    // CABEÇALHO DO MODAL
 
-    // Cabeçalho
     const cabecalho = document.createElement("div");
 
-    Object.assign(cabecalho.style, {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: "16px",
-      marginBottom: "10px",
-    });
+    cabecalho.className =
+      "mb-5 flex items-center justify-between gap-4";
 
-    const titulo = criarTexto("h2", "Detalhes do lote", {
-      fontSize: "21px",
-      fontWeight: "700",
-      margin: "0",
-    });
+    const titulo = criarTexto(
+      "h2",
+      "Detalhes do lote",
+      "text-lg font-semibold text-text",
+    );
 
-    const tituloId = "titulo-modal-vencimento";
-    titulo.id = tituloId;
-    modal.setAttribute("aria-labelledby", tituloId);
+    titulo.id = "titulo-modal-vencimento";
+
+    modal.setAttribute("aria-labelledby", titulo.id);
+
+    // BOTÃO X
 
     const botaoX = document.createElement("button");
+
     botaoX.type = "button";
     botaoX.textContent = "×";
-    botaoX.setAttribute("aria-label", "Fechar detalhes");
 
-    Object.assign(botaoX.style, {
-      border: "none",
-      background: "transparent",
-      cursor: "pointer",
-      fontSize: "29px",
-      lineHeight: "1",
-      color: "#64748b",
-    });
+    botaoX.className =
+      "cursor-pointer text-2xl text-text-secondary";
+
+    botaoX.setAttribute(
+      "aria-label",
+      "Fechar detalhes"
+    );
 
     cabecalho.append(titulo, botaoX);
 
+    // DESCRIÇÃO DO MODAL
+
     const descricao = criarTexto(
       "p",
-      "Informações do produto próximo ao vencimento.",
-      {
-        fontSize: "13px",
-        color: "#64748b",
-        marginBottom: "22px",
-      },
+      "Informações do lote próximo ao vencimento.",
+      "mb-5 text-xs text-text-secondary",
     );
 
-    // Situação do vencimento
-    const selo = criarTexto("span", situacao, {
-      display: "inline-block",
-      backgroundColor: fundoSituacao,
-      color: corSituacao,
-      padding: "8px 13px",
-      borderRadius: "20px",
-      fontSize: "13px",
-      fontWeight: "700",
-      marginBottom: "22px",
-    });
+    // SITUAÇÃO DO VENCIMENTO
 
-    // Área com as informações
+    const situacao = obterSituacao(lote);
+
+    const status = criarTexto(
+      "p",
+      situacao,
+      "mb-4 text-sm font-semibold text-text",
+    );
+
+    // ÁREA DAS INFORMAÇÕES
+
     const informacoes = document.createElement("div");
 
-    Object.assign(informacoes.style, {
-      backgroundColor: "#f8fafc",
-      border: "1px solid #e2e8f0",
-      borderRadius: "8px",
-      padding: "8px 18px",
-      marginBottom: "24px",
-    });
+    informacoes.className =
+      "rounded-md bg-[#e9ebee] px-4 py-2";
+
+    // ADICIONAR INFORMAÇÃO AO MODAL
 
     function adicionarCampo(rotulo, valor) {
-      const campo = document.createElement("div");
+      const linha = document.createElement("div");
 
-      Object.assign(campo.style, {
-        display: "flex",
-        justifyContent: "space-between",
-        gap: "16px",
-        padding: "13px 0",
-        borderBottom: "1px solid #e2e8f0",
-      });
+      linha.className =
+        "flex items-start justify-between gap-4 " +
+        "border-b border-gray-300 py-3";
 
-      const label = criarTexto("span", rotulo, {
-        color: "#64748b",
-        fontSize: "14px",
-      });
+      const nome = criarTexto(
+        "span",
+        rotulo,
+        "text-xs text-text-secondary"
+      );
 
-      const conteudo = criarTexto("strong", valor ?? "-", {
-        fontSize: "14px",
-        textAlign: "right",
-        overflowWrap: "anywhere",
-      });
+      const conteudo = criarTexto(
+        "strong",
+        valor ?? "-",
+        "break-words text-right text-xs font-semibold text-text",
+      );
 
-      campo.append(label, conteudo);
-      informacoes.appendChild(campo);
+      linha.append(nome, conteudo);
+
+      informacoes.appendChild(linha);
     }
 
-    adicionarCampo("Produto", lote.produtoNome || "Produto sem nome");
+    // DADOS DO LOTE
 
-    adicionarCampo("Código do lote", lote.codigo || "-");
+    adicionarCampo(
+      "Produto",
+      lote.produtoNome || "Produto sem nome"
+    );
+
+    adicionarCampo(
+      "Código do lote",
+      lote.codigo || "-"
+    );
+
+    // QUANTIDADE DISPONÍVEL NO MODAL
+    // EXIBIR SOMENTE O NÚMERO
 
     adicionarCampo(
       "Quantidade disponível",
-      formatarQuantidade(lote.quantidadeDisponivel, lote.unidadeMedida),
+      formatarQuantidade(lote.quantidadeDisponivel),
     );
 
-    adicionarCampo("Data de validade", formatarData(lote.dataValidade));
+    adicionarCampo(
+      "Data de validade",
+      formatarData(lote.dataValidade)
+    );
 
-    adicionarCampo("Situação", situacao);
+    adicionarCampo(
+      "Situação",
+      situacao
+    );
 
-    // Botão principal
+    // RODAPÉ DO MODAL
+
     const rodape = document.createElement("div");
 
-    Object.assign(rodape.style, {
-      display: "flex",
-      justifyContent: "flex-end",
-    });
+    rodape.className = "mt-6 flex justify-end";
 
-    const botaoFechar = document.createElement("button");
+    const botaoFechar =
+      document.createElement("button");
+
     botaoFechar.type = "button";
     botaoFechar.textContent = "Fechar";
 
-    Object.assign(botaoFechar.style, {
-      backgroundColor: "#334155",
-      color: "#ffffff",
-      border: "none",
-      borderRadius: "7px",
-      padding: "11px 26px",
-      fontSize: "14px",
-      fontWeight: "600",
-      cursor: "pointer",
-    });
+    botaoFechar.className =
+      "cursor-pointer rounded bg-primary-dark " +
+      "px-5 py-2 text-xs font-semibold text-white";
 
     rodape.appendChild(botaoFechar);
 
-    modal.append(cabecalho, descricao, selo, informacoes, rodape);
+    // MONTAR MODAL
+
+    modal.append(
+      cabecalho,
+      descricao,
+      status,
+      informacoes,
+      rodape
+    );
 
     overlay.appendChild(modal);
+
     document.body.appendChild(overlay);
 
-    const overflowAnterior = document.body.style.overflow;
+    // BLOQUEAR ROLAGEM DO FUNDO
+
+    const overflowAnterior =
+      document.body.style.overflow;
+
     document.body.style.overflow = "hidden";
 
+    // FECHAR MODAL
+
     function fechar() {
-      document.removeEventListener("keydown", tratarTeclado);
+      document.removeEventListener(
+        "keydown",
+        tratarTeclado
+      );
 
       overlay.remove();
-      document.body.style.overflow = overflowAnterior;
+
+      document.body.style.overflow =
+        overflowAnterior;
+
       modalAberto = null;
 
       if (botaoOrigem && botaoOrigem.isConnected) {
@@ -303,27 +498,44 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // CONTROLE DO TECLADO
+
     function tratarTeclado(evento) {
+
+      // FECHAR COM ESCAPE
+
       if (evento.key === "Escape") {
         fechar();
+        return;
       }
 
-      if (evento.key === "Tab") {
-        const controles = [botaoX, botaoFechar];
-        const primeiro = controles[0];
-        const ultimo = controles[controles.length - 1];
+      // MANTER FOCO DENTRO DO MODAL
 
-        if (evento.shiftKey && document.activeElement === primeiro) {
+      if (evento.key === "Tab") {
+        const primeiro = botaoX;
+        const ultimo = botaoFechar;
+
+        if (
+          evento.shiftKey &&
+          document.activeElement === primeiro
+        ) {
           evento.preventDefault();
           ultimo.focus();
-        } else if (!evento.shiftKey && document.activeElement === ultimo) {
+
+        } else if (
+          !evento.shiftKey &&
+          document.activeElement === ultimo
+        ) {
           evento.preventDefault();
           primeiro.focus();
         }
       }
     }
 
+    // EVENTOS DE FECHAMENTO
+
     botaoX.addEventListener("click", fechar);
+
     botaoFechar.addEventListener("click", fechar);
 
     overlay.addEventListener("click", (evento) => {
@@ -332,159 +544,374 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    document.addEventListener("keydown", tratarTeclado);
+    document.addEventListener(
+      "keydown",
+      tratarTeclado
+    );
 
     modalAberto = { fechar };
+
     botaoX.focus();
   }
 
-  // Cria uma linha da tabela usando os dados da API
+  // =====================================================
+  // CONSTRUÇÃO DAS LINHAS DA TABELA
+  // Cria os elementos visuais para apresentar cada lote,
+  // incluindo produto, código, saldo, validade e botão
+  // de acesso ao modal de detalhes.
+  // =====================================================
+
   function criarLinha(lote) {
-    const linha = document.createElement("div");
+    const linha = document.createElement("tr");
 
     linha.className =
-      "grid min-h-[48px] " +
-      "grid-cols-[1fr_1fr_1.2fr_180px] " +
-      "items-center border-b border-gray-300 " +
-      "text-center text-text";
+      "border-b border-gray-300 bg-[#e9ebee] text-text";
 
-    const produto = document.createElement("div");
-    produto.className = "flex flex-col px-2 py-2";
+    // PRODUTO
 
-    const nome = document.createElement("span");
-    nome.className = "text-sm font-bold";
-    nome.textContent = lote.produtoNome || "Produto sem nome";
-
-    const codigo = document.createElement("span");
-    codigo.className = "text-xs text-text-secondary";
-    codigo.textContent = "Lote: " + (lote.codigo || "-");
-
-    produto.append(nome, codigo);
-
-    const quantidade = document.createElement("span");
-    quantidade.className = "px-2 text-sm font-semibold";
-    quantidade.textContent = formatarQuantidade(
-      lote.quantidadeDisponivel,
-      lote.unidadeMedida,
+    criarCelula(
+      linha,
+      lote.produtoNome || "Produto não encontrado"
     );
 
-    const validade = document.createElement("span");
-    validade.className = "px-2 text-sm font-bold";
-    validade.textContent = formatarData(lote.dataValidade);
+    // CÓDIGO DO LOTE
 
-    const acoes = document.createElement("div");
-    acoes.className = "flex justify-center";
+    criarCelula(
+      linha,
+      lote.codigo || "-"
+    );
+
+    // QUANTIDADE DISPONÍVEL NA TABELA
+    // EXIBIR SOMENTE O NÚMERO
+
+    criarCelula(
+      linha,
+      formatarQuantidade(lote.quantidadeDisponivel),
+      true,
+    );
+
+    // DATA DE VALIDADE
+
+    criarCelula(
+      linha,
+      formatarData(lote.dataValidade),
+      true
+    );
+
+    // AÇÕES
+
+    const celulaAcoes = document.createElement("td");
+
+    celulaAcoes.className =
+      "px-3 py-3 text-center";
+
+    const grupo = document.createElement("div");
+
+    grupo.className =
+      "flex items-center justify-center";
+
+    // BOTÃO DETALHES
 
     const detalhes = document.createElement("button");
+
     detalhes.type = "button";
     detalhes.textContent = "Detalhes";
 
     detalhes.className =
-      "cursor-pointer px-2 py-1 text-xs " +
-      "font-semibold text-primary hover:underline";
+      "cursor-pointer rounded px-3 py-1 " +
+      "text-xs font-semibold text-primary-dark " +
+      "hover:bg-primary-light";
+
+    detalhes.setAttribute(
+      "aria-label",
+      `Ver detalhes do lote ${lote.codigo || ""}`,
+    );
 
     detalhes.addEventListener("click", () => {
       abrirModalDetalhes(lote, detalhes);
     });
 
-    acoes.appendChild(detalhes);
-    linha.append(produto, quantidade, validade, acoes);
+    grupo.appendChild(detalhes);
+
+    celulaAcoes.appendChild(grupo);
+    linha.appendChild(celulaAcoes);
 
     return linha;
   }
 
-  // Atualiza a aparência dos botões de filtro
-  function selecionarFiltro(botaoAtivo) {
-    botoes.forEach((botao) => {
-      botao.classList.remove("bg-primary-dark", "text-white");
+  // =====================================================
+  // PESQUISA DE PRODUTOS NA TABELA
+  // Filtra os lotes já carregados de acordo com o nome
+  // digitado pelo usuário, desconsiderando diferenças
+  // entre letras maiúsculas, minúsculas e acentuação.
+  // =====================================================
 
-      botao.classList.add("bg-gray-200", "text-text");
+  // NORMALIZAR TEXTO
 
-      botao.setAttribute("aria-pressed", "false");
-    });
-
-    botaoAtivo.classList.remove("bg-gray-200", "text-text");
-
-    botaoAtivo.classList.add("bg-primary-dark", "text-white");
-
-    botaoAtivo.setAttribute("aria-pressed", "true");
+  function normalizarTexto(texto) {
+    return String(texto || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
   }
 
-  // Consulta a API Java
+  // FILTRAR PRODUTOS PELO NOME
+
+  function filtrarProdutos() {
+
+    // EVITAR ALTERAR A TABELA DURANTE O CARREGAMENTO
+
+    if (carregando || erroCarregamento) {
+      return;
+    }
+
+    const pesquisa = normalizarTexto(
+      campoPesquisa.value
+    );
+
+    const lotesFiltrados = lotesCarregados.filter(
+      (lote) => {
+        const nomeProduto = normalizarTexto(
+          lote.produtoNome
+        );
+
+        return nomeProduto.includes(pesquisa);
+      }
+    );
+
+    // LIMPAR TABELA
+
+    tabela.replaceChildren();
+
+    // NENHUM RESULTADO
+
+    if (lotesFiltrados.length === 0) {
+      mostrarMensagemTabela(
+        pesquisa
+          ? "Nenhum produto encontrado com esse nome neste período."
+          : "Nenhum lote encontrado para este período.",
+      );
+
+      return;
+    }
+
+    // PREENCHER TABELA
+
+    const fragmento =
+      document.createDocumentFragment();
+
+    lotesFiltrados.forEach((lote) => {
+      fragmento.appendChild(
+        criarLinha(lote)
+      );
+    });
+
+    tabela.appendChild(fragmento);
+  }
+
+  // PESQUISAR ENQUANTO DIGITA
+
+  campoPesquisa.addEventListener(
+    "input",
+    filtrarProdutos
+  );
+
+  // =====================================================
+  // CONTROLE VISUAL DOS FILTROS DE VENCIMENTO
+  // Atualiza a aparência do botão selecionado,
+  // indicando o período de consulta ativo.
+  // =====================================================
+
+  function selecionarFiltro(botaoAtivo) {
+    botoes.forEach((botao) => {
+      botao.classList.remove(
+        "bg-primary-dark",
+        "text-white"
+      );
+
+      botao.classList.add(
+        "bg-[#e9ebee]",
+        "text-text"
+      );
+
+      botao.setAttribute(
+        "aria-pressed",
+        "false"
+      );
+    });
+
+    botaoAtivo.classList.remove(
+      "bg-[#e9ebee]",
+      "text-text"
+    );
+
+    botaoAtivo.classList.add(
+      "bg-primary-dark",
+      "text-white"
+    );
+
+    botaoAtivo.setAttribute(
+      "aria-pressed",
+      "true"
+    );
+  }
+
+  // =====================================================
+  // CARREGAMENTO DOS LOTES PELO BACKEND
+  // Consulta os lotes do período selecionado utilizando
+  // o token de autenticação, controla carregamentos,
+  // cancela requisições anteriores e apresenta
+  // mensagens de erro ou ausência de resultados.
+  // =====================================================
+
   async function carregarLotes(dias) {
+
+    // CANCELAR REQUISIÇÃO ANTERIOR
+
     if (requisicaoAtual) {
       requisicaoAtual.abort();
     }
 
     const controlador = new AbortController();
+
     requisicaoAtual = controlador;
 
-    lista.replaceChildren();
-    mostrarMensagem("Carregando lotes...");
+    // FECHAR MODAL ABERTO
+
+    if (modalAberto) {
+      modalAberto.fechar();
+    }
+
+    // LIMPAR DADOS ANTERIORES
+
+    lotesCarregados = [];
+
+    carregando = true;
+    erroCarregamento = false;
+
+    limparErro();
+
+    mostrarMensagemTabela("Carregando lotes...");
 
     try {
-      const resposta = await fetch(`${API_URL}?dias=${dias}`, {
-        method: "GET",
-        signal: controlador.signal,
-        cache: "no-store",
-      });
 
-      if (!resposta.ok) {
-        throw new Error("Erro HTTP " + resposta.status);
+      // CONSULTAR BACKEND COM AUTENTICAÇÃO
+
+      const resposta = await requisicaoAutenticada(
+        `${API_URL}?dias=${dias}`,
+        controlador.signal,
+      );
+
+      const dados = await lerResposta(resposta);
+
+      // IGNORAR REQUISIÇÕES CANCELADAS
+
+      if (controlador.signal.aborted) {
+        return;
       }
 
-      const dados = await resposta.json();
+      // VALIDAR DADOS RETORNADOS
 
       if (!Array.isArray(dados.lotes)) {
-        throw new Error("Resposta inválida da API");
+        throw new Error(
+          "Resposta inválida do servidor."
+        );
       }
 
-      if (dados.lotes.length === 0) {
-        mostrarMensagem("Nenhum lote encontrado para este período.");
-        return;
-      }
+      // ARMAZENAR LOTES
 
-      const fragmento = document.createDocumentFragment();
+      lotesCarregados = dados.lotes;
 
-      dados.lotes.forEach((lote) => {
-        fragmento.appendChild(criarLinha(lote));
-      });
+      carregando = false;
 
-      lista.appendChild(fragmento);
-      esconderMensagem();
+      // APLICAR PESQUISA ATUAL
+
+      filtrarProdutos();
+
     } catch (erro) {
-      if (erro.name === "AbortError") {
+
+      // IGNORAR REQUISIÇÕES CANCELADAS
+
+      if (
+        erro.name === "AbortError" ||
+        controlador.signal.aborted
+      ) {
         return;
       }
 
-      console.error("Erro ao carregar lotes:", erro);
-
-      mostrarMensagem(
-        "Não foi possível carregar os lotes. " +
-          "Verifique se o backend está em execução.",
+      console.error(
+        "Erro ao carregar próximos vencimentos:",
+        erro
       );
+
+      lotesCarregados = [];
+      erroCarregamento = true;
+
+      mostrarMensagemTabela(
+        "Não foi possível carregar os lotes."
+      );
+
+      mostrarErro(erro.message);
+
     } finally {
+
+      // SOMENTE A REQUISIÇÃO MAIS RECENTE
+      // PODE ATUALIZAR O ESTADO DO CARREGAMENTO
+
       if (requisicaoAtual === controlador) {
+        carregando = false;
         requisicaoAtual = null;
       }
     }
   }
 
-  // Eventos dos filtros
+  // =====================================================
+  // EVENTOS DOS FILTROS DE VENCIMENTO
+  // Associa cada botão ao período correspondente e
+  // atualiza a listagem quando o usuário seleciona
+  // um dos cinco intervalos disponíveis.
+  // =====================================================
+
   botoes.forEach((botao) => {
     botao.addEventListener("click", () => {
-      const dias = Number(botao.dataset.dias);
+
+      const dias = Number(
+        botao.dataset.dias
+      );
+
+      // ACEITAR SOMENTE OS PERÍODOS DEFINIDOS
+
+      if (!PERIODOS_VALIDOS.includes(dias)) {
+        return;
+      }
 
       selecionarFiltro(botao);
+
       carregarLotes(dias);
     });
   });
 
-  // Carrega inicialmente os próximos 7 dias
-  const filtroInicial = document.querySelector('[data-dias="7"]');
+  // =====================================================
+  // INICIALIZAÇÃO DA TELA
+  // Confirma a existência do token e realiza a primeira
+  // consulta utilizando o filtro de vencimento de hoje.
+  // =====================================================
+
+  if (!obterToken()) {
+    encerrarAcesso();
+    return;
+  }
+
+  // FILTRO INICIAL: HOJE
+
+  const filtroInicial = document.querySelector(
+    '[data-dias="1"]'
+  );
 
   if (filtroInicial) {
     selecionarFiltro(filtroInicial);
-    carregarLotes(7);
+
+    carregarLotes(1);
   }
 });

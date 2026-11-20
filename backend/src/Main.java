@@ -17,291 +17,343 @@ import org.bson.Document;
 import controller.LoginHandler;
 import controller.DashboardHandler;
 import controller.LotesHandler;
+import controller.MovimentacoesHandler;
 import controller.PerfilUsuarioHandler;
 import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
 import controller.HistoricoDespHandler;
 import controller.RecuperacaoSenhaHandler;
+import controller.ProximosVencimentoHandler;
 
 // SERVIDOR SOCKET
 
 import model.RepositorioVencimentos;
 import server.ServidorSocket;
 
+import service.SessaoService;
+
 public class Main {
 
-    public static void main(String[] args) throws Exception {
+        public static void main(String[] args) throws Exception {
 
-        MongoClient cliente = MongoDBConnection.conectar();
+                // CONEXÃO COM O MONGODB
 
-        try {
+                MongoClient cliente = MongoDBConnection.conectar();
 
-            // CONEXÃO COM O BANCO
+                try {
 
-            MongoDatabase banco = cliente.getDatabase(
-                "desperdicio_alimentos"
-            );
+                        // SELECIONAR BANCO DE DADOS
 
-            banco.runCommand(
-                new Document("ping", 1)
-            );
+                        MongoDatabase banco = cliente.getDatabase(
+                                        "desperdicio_alimentos");
 
-            // COLEÇÕES DO MONGODB
+                        // VERIFICAR CONEXÃO
 
-            MongoCollection<Document> usuarios =
-                banco.getCollection("users");
+                        banco.runCommand(
+                                        new Document("ping", 1));
 
-            MongoCollection<Document> sessoes =
-                banco.getCollection("sessoes");
+                        // COLEÇÕES DO MONGODB
 
-            MongoCollection<Document> recuperacoesSenha =
-                banco.getCollection("recuperacoes_senha");
+                        MongoCollection<Document> usuarios = banco.getCollection("users");
 
-            MongoCollection<Document> produtos =
-                banco.getCollection("itens");
+                        MongoCollection<Document> sessoes = banco.getCollection("sessoes");
+                  
+                        MongoCollection<Document> recuperacoesSenha = banco.getCollection("recuperacoes_senha");
 
-            MongoCollection<Document> lotes =
-                banco.getCollection("lotes");
+                        MongoCollection<Document> produtos = banco.getCollection("itens");
 
-            MongoCollection<Document> movimentacoes =
-                banco.getCollection("movimentacoes");
+                        MongoCollection<Document> lotes = banco.getCollection("lotes");
 
-            MongoCollection<Document> categorias =
-                banco.getCollection("categorias");
+                        MongoCollection<Document> movimentacoes = banco.getCollection("movimentacoes");
 
-            // ÍNDICES DE USUÁRIOS E SESSÕES
+                        MongoCollection<Document> categorias = banco.getCollection("categorias");
 
-            usuarios.createIndex(
-                Indexes.ascending("email"),
-                new IndexOptions().unique(true)
-            );
-
-            sessoes.createIndex(
-                Indexes.ascending("token"),
-                new IndexOptions().unique(true)
-            );
+                        // ÍNDICES DE USUÁRIOS
 
-            sessoes.createIndex(
-                Indexes.ascending("expiraEm"),
-                new IndexOptions().expireAfter(
-                    0L,
-                    TimeUnit.SECONDS
-                )
-            );
-
-            // ÍNDICE DE RECUPERAÇÃO DE SENHA
-
-            recuperacoesSenha.createIndex(
-                Indexes.ascending("expiraEm"),
-                new IndexOptions().expireAfter(
-                    0L,
-                    TimeUnit.SECONDS
-                )
-            );
-
-            // SERVIDOR HTTP
-
-            HttpServer servidor = HttpServer.create(
-                new InetSocketAddress(
-                    "127.0.0.1",
-                    8080
-                ),
-                0
-            );
-
-            // CADASTRO DE USUÁRIOS
-
-            servidor.createContext(
-                "/api/usuarios",
-                new UsuariosHandler(usuarios)
-            );
-
-            // LOGIN E SESSÕES
-
-            LoginHandler loginHandler =
-                new LoginHandler(
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/login",
-                loginHandler
-            );
-
-            servidor.createContext(
-                "/api/logout",
-                loginHandler
-            );
-
-            servidor.createContext(
-                "/api/usuario",
-                loginHandler
-            );
-
-            // RECUPERAÇÃO E REDEFINIÇÃO DE SENHA
-
-            RecuperacaoSenhaHandler recuperacaoSenhaHandler =
-                new RecuperacaoSenhaHandler(
-                    usuarios,
-                    sessoes,
-                    recuperacoesSenha
-                );
-
-            servidor.createContext(
-                "/api/senha/",
-                recuperacaoSenhaHandler
-            );
-
-            // PERFIL DO USUÁRIO
-
-            servidor.createContext(
-                "/api/perfil",
-                new PerfilUsuarioHandler(
-                    usuarios,
-                    sessoes
-                )
-            );
-
-            // DASHBOARD
-
-            DashboardHandler dashboardHandler =
-                new DashboardHandler(
-                    produtos,
-                    lotes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/dashboard/resumo",
-                dashboardHandler
-            );
-
-            // RELATÓRIOS
-
-            RelatoriosHandler relatoriosHandler =
-                new RelatoriosHandler(
-                    produtos,
-                    lotes,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/relatorios/",
-                relatoriosHandler
-            );
-
-            // PRODUTOS E CATEGORIAS
-
-            ProdutosHandler produtosHandler =
-                new ProdutosHandler(
-                    produtos,
-                    categorias,
-                    lotes,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/produtos",
-                produtosHandler
-            );
-
-            servidor.createContext(
-                "/api/categorias",
-                produtosHandler
-            );
-
-            // LOTES
-
-            LotesHandler lotesHandler =
-                new LotesHandler(
-                    lotes,
-                    produtos,
-                    movimentacoes,
-                    usuarios,
-                    sessoes
-                );
-
-            servidor.createContext(
-                "/api/lotes",
-                lotesHandler
-            );
-
-            // MOVIMENTAÇÕES
-
-            servidor.createContext(
-                "/api/movimentacoes",
-                new MovimentacoesHandler(
-                    cliente,
-                    lotes,
-                    movimentacoes
-                )
-            );
-
-            // HISTÓRICO DE DESPERDÍCIO
-
-            HistoricoDespHandler historicoHandler =
-                new HistoricoDespHandler(banco);
-
-            servidor.createContext(
-                "/api/saidas",
-                historicoHandler
-            );
-
-            // REPOSITÓRIO DO SERVIDOR SOCKET
-
-            RepositorioVencimentos repositorio =
-                new RepositorioVencimentos(
-                    lotes,
-                    produtos
-                );
-
-            // THREAD DO SERVIDOR SOCKET
-
-            Thread threadServidor = new Thread(
-                new ServidorSocket(repositorio),
-                "servidor-vencimentos"
-            );
-
-            // ENCERRAMENTO SEGURO
-
-            Runtime.getRuntime().addShutdownHook(
-                new Thread(() -> {
-
-                    servidor.stop(0);
-                    cliente.close();
-
-                })
-            );
-
-            // INICIALIZAÇÃO DOS SERVIDORES
-
-            servidor.start();
-
-            threadServidor.start();
-
-            System.out.println(
-                "Servidor HTTP iniciado na porta 8080"
-            );
-
-            System.out.println(
-                "MongoDB conectado com sucesso!"
-            );
-
-            System.out.println(
-                "Servidor Socket inicializado!"
-            );
-
-        } catch (Exception erro) {
-
-            cliente.close();
-            throw erro;
+                        // Impede e-mails duplicados
+
+                        usuarios.createIndex(
+                                        Indexes.ascending("email"),
+                                        new IndexOptions().unique(true));
+
+                        // ÍNDICES DE SESSÕES
+
+                        // Garante tokens únicos
+
+                        sessoes.createIndex(
+                                        Indexes.ascending("token"),
+                                        new IndexOptions().unique(true));
+
+                        // Remove automaticamente sessões expiradas
+
+                        sessoes.createIndex(
+                                        Indexes.ascending("expiraEm"),
+                                        new IndexOptions().expireAfter(
+                                                        0L,
+                                                        TimeUnit.SECONDS));
+                        
+                        recuperacoesSenha.createIndex(
+                                         Indexes.ascending("expiraEm"),
+                                         new IndexOptions().expireAfter(
+                                                         0L,
+                                                         TimeUnit.SECONDS));      
+
+                        // ÍNDICE DE MOVIMENTAÇÕES
+
+                        // Impede registrar duas movimentações
+                        // com a mesma chave de idempotência
+
+                        // Mantém compatibilidade com registros
+                        // antigos que não possuem idempotencyKey
+
+                        movimentacoes.createIndex(
+                                        Indexes.ascending("idempotencyKey"),
+                                        new IndexOptions()
+                                                        .unique(true)
+                                                        .partialFilterExpression(
+                                                                        new Document(
+                                                                                        "idempotencyKey",
+                                                                                        new Document("$exists",
+                                                                                                        true))));
+
+                        // SERVIDOR HTTP
+
+                        HttpServer servidor = HttpServer.create(
+                                        new InetSocketAddress(
+                                                        "127.0.0.1",
+                                                        8080),
+                                        0);
+
+                        // CADASTRO DE USUÁRIOS
+
+                        servidor.createContext(
+                                        "/api/usuarios",
+                                        new UsuariosHandler(usuarios));
+
+                        // LOGIN E SESSÕES
+
+                        LoginHandler loginHandler = new LoginHandler(
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/login",
+                                        loginHandler);
+                  
+                        // RECUPERAÇÃO E REDEFINIÇÃO DE SENHA
+
+                        RecuperacaoSenhaHandler recuperacaoSenhaHandler =
+                            new RecuperacaoSenhaHandler(
+                                usuarios,
+                                sessoes,
+                                recuperacoesSenha);
+
+                        servidor.createContext(
+                            "/api/senha/",
+                            recuperacaoSenhaHandler);
+
+                        servidor.createContext(
+                                        "/api/logout",
+                                        loginHandler);
+
+                        servidor.createContext(
+                                        "/api/usuario",
+                                        loginHandler);
+
+                        // PERFIL DO USUÁRIO
+
+                        // Consulta e atualiza os dados do usuário
+                        // identificado pelo token de autenticação
+
+                        PerfilUsuarioHandler perfilHandler = new PerfilUsuarioHandler(
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/perfil",
+                                        perfilHandler);
+
+                        // DASHBOARD
+
+                        // Consulta somente os dados da conta logada
+
+                        DashboardHandler dashboardHandler = new DashboardHandler(
+                                        produtos,
+                                        lotes,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/dashboard/resumo",
+                                        dashboardHandler);
+
+                        // RELATÓRIOS
+
+                        // Consulta os relatórios e indicadores
+                        // pertencentes ao usuário autenticado
+
+                        RelatoriosHandler relatoriosHandler = new RelatoriosHandler(
+                                        produtos,
+                                        lotes,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/relatorios/",
+                                        relatoriosHandler);
+
+                        // PRODUTOS E CATEGORIAS
+
+                        // Gerencia os produtos e categorias
+                        // associados ao usuário autenticado
+
+                        ProdutosHandler produtosHandler = new ProdutosHandler(
+                                        produtos,
+                                        categorias,
+                                        lotes,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/produtos",
+                                        produtosHandler);
+
+                        servidor.createContext(
+                                        "/api/categorias",
+                                        produtosHandler);
+
+                        // LOTES
+
+                        // Gerencia os lotes da conta autenticada
+
+                        LotesHandler lotesHandler = new LotesHandler(
+                                        lotes,
+                                        produtos,
+                                        movimentacoes,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/lotes",
+                                        lotesHandler);
+
+                        // PRÓXIMOS VENCIMENTOS
+
+                        // NOVO CONTROLLER:
+                        // Recebe a requisição e valida a sessão.
+                        //
+                        // NOVO SERVICE:
+                        // Consulta os lotes e produtos do usuário
+                        // dentro do período solicitado.
+
+                        ProximosVencimentoHandler vencimentosHandler = new ProximosVencimentoHandler(
+                                        lotes,
+                                        produtos,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/lotes/proximos-vencimento",
+                                        vencimentosHandler);
+
+                        // MOVIMENTAÇÕES
+
+                        // CONTROLLER:
+                        // Recebe a requisição e autentica o usuário.
+                        //
+                        // SERVICE:
+                        // Valida a saída, atualiza o estoque
+                        // e registra a movimentação no MongoDB.
+
+                        MovimentacoesHandler movimentacoesHandler = new MovimentacoesHandler(
+                                        cliente,
+                                        lotes,
+                                        movimentacoes,
+                                        produtos,
+                                        usuarios,
+                                        sessoes);
+
+                        servidor.createContext(
+                                        "/api/movimentacoes",
+                                        movimentacoesHandler);
+
+                        // HISTÓRICO DE DESPERDÍCIO
+
+                        // Retorna somente movimentações associadas
+                        // aos lotes e produtos do usuário autenticado
+
+                        HistoricoDespHandler historicoHandler = new HistoricoDespHandler(banco);
+
+                        servidor.createContext(
+                                        "/api/saidas",
+                                        historicoHandler);
+
+                        // REPOSITÓRIO DO SERVIDOR SOCKET
+
+                        // Compartilha as coleções de lotes e produtos
+                        // com o serviço de vencimentos via Socket
+
+                        RepositorioVencimentos repositorio = new RepositorioVencimentos(
+                                        lotes,
+                                        produtos);
+
+                        SessaoService sessaoService = new SessaoService(usuarios, sessoes);
+
+                        // THREAD DO SERVIDOR SOCKET
+
+                        // Mantém o servidor Socket independente
+                        // do servidor HTTP da porta 8080
+
+                        Thread threadServidor = new Thread(
+                                        new ServidorSocket(repositorio, sessaoService, 8081),
+                                        "servidor-vencimentos");
+
+                        // ENCERRAMENTO SEGURO
+
+                        // Fecha o servidor HTTP e o MongoDB
+                        // quando a aplicação for encerrada
+
+                        Runtime.getRuntime().addShutdownHook(
+                                        new Thread(() -> {
+
+                                                servidor.stop(0);
+
+                                                cliente.close();
+
+                                        }));
+
+                        // INICIALIZAR SERVIDOR HTTP
+
+                        servidor.start();
+
+                        // INICIALIZAR SERVIDOR SOCKET
+
+                        threadServidor.start();
+
+                        // MENSAGENS DO TERMINAL
+
+                        System.out.println(
+                                        "Servidor HTTP iniciado na porta 8080");
+
+                        System.out.println(
+                                        "MongoDB conectado com sucesso!");
+
+                        System.out.println(
+                                        "Servidor Socket inicializado!");
+
+                        System.out.println(
+                                        "Rota de próximos vencimentos ativada!");
+
+                } catch (Exception erro) {
+
+                        // ENCERRAR CONEXÃO SE A INICIALIZAÇÃO FALHAR
+
+                        cliente.close();
+
+                        throw erro;
+                }
         }
-    }
 }

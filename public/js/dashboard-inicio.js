@@ -306,16 +306,61 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function iniciarGrafico() {
     if (!elementoGrafico || typeof ApexCharts === "undefined") {
       console.error("Biblioteca ou elemento do gráfico não encontrado.");
-
       return;
     }
 
+    elementoGrafico.textContent = "Carregando desperdícios...";
+
     try {
-      const grafico = new ApexCharts(elementoGrafico, options);
+      const resposta = await requisicaoAutenticada(
+        `${API_URL}/api/relatorios/desperdicios/evolucao-mensal`,
+      );
+
+      const dados = await lerResposta(resposta);
+
+      if (!Array.isArray(dados.evolucaoMensal)) {
+        throw new Error("Formato de resposta inválido.");
+      }
+
+      const registros = dados.evolucaoMensal;
+
+      const meses = registros.map((registro) => {
+        const [ano, mes] = registro.mes.split("-");
+        return `${mes}/${ano}`;
+      });
+
+      const ocorrencias = registros.map((registro) =>
+        Number(registro.totalOcorrencias),
+      );
+
+      elementoGrafico.replaceChildren();
+
+      const grafico = new ApexCharts(elementoGrafico, {
+        ...options,
+
+        series: [
+          {
+            name: "Ocorrências de desperdício",
+            data: ocorrencias,
+          },
+        ],
+
+        xaxis: {
+          ...options.xaxis,
+          categories: meses,
+        },
+
+        noData: {
+          text: "Nenhum dado disponível.",
+        },
+      });
 
       await grafico.render();
     } catch (erro) {
       console.error("Erro ao carregar gráfico:", erro);
+
+      elementoGrafico.textContent =
+        "Não foi possível carregar os dados de desperdício.";
     }
   }
 
@@ -345,10 +390,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function buscarProximosVencimentos() {
     try {
-      const resposta = await fetch(`${API_VENCIMENTOS}?dias=7`, {
-        method: "GET",
-        cache: "no-store",
-      });
+      const resposta = await requisicaoAutenticada(`${API_VENCIMENTOS}?dias=7`);
 
       const dados = await lerResposta(resposta);
 

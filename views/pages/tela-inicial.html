@@ -1,0 +1,226 @@
+<!-- Código feito por Lucas David de Sousa RA: 25895152 -->
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Início | EcoStock</title>
+
+  <link
+    rel="stylesheet"
+    href="../../public/css/style.css"
+  >
+</head>
+
+<body class="min-h-screen bg-[#202020] p-2 font-sans">
+
+  <!-- Tela inicial -->
+  <main
+    class="
+      relative
+      isolate
+      min-h-[calc(100vh-16px)]
+      overflow-hidden
+      rounded-[8px]
+      bg-[#202020]
+    "
+  >
+
+    <!-- Imagem de fundo -->
+    <img
+      src="../../public/images/foto-inicial.jpeg"
+      alt=""
+      aria-hidden="true"
+      class="
+        absolute
+        inset-0
+        -z-20
+        h-full
+        w-full
+        object-cover
+        object-[65%_center]
+        lg:object-center
+      "
+    >
+
+    <!-- Escurecimento da imagem -->
+    <div
+      class="
+        absolute
+        inset-0
+        -z-10
+        bg-gradient-to-r
+        from-black/90
+        via-black/65
+        to-black/30
+      "
+    ></div>
+
+    <!-- Conteúdo principal -->
+    <section
+      class="
+        flex
+        min-h-[calc(100vh-16px)]
+        flex-col
+        items-start
+        justify-center
+        px-8
+        py-16
+
+        sm:px-12
+
+        lg:justify-start
+        lg:px-[6%]
+        lg:pt-[105px]
+      "
+    >
+
+      <div class="w-full max-w-[470px]">
+
+        <!-- Título principal -->
+        <h1
+          class="
+            text-[29px]
+            font-bold
+            leading-[1.28]
+            text-[#DDE2E4]
+
+            sm:text-[36px]
+            lg:text-[38px]
+          "
+        >
+          CONTROLE SEU ESTOQUE
+          SEM COMPLICAÇÕES COM O ECOSTOCK!!
+        </h1>
+
+        <!-- Descrição -->
+        <p
+          class="
+            mt-5
+            max-w-[330px]
+            text-[15px]
+            leading-[1.6]
+            text-[#E0E0E0]
+
+            sm:text-[17px]
+          "
+        >
+          Gerencie produtos, validades,
+          entradas e saídas em um só lugar.
+        </p>
+
+        <!-- Botões de navegação -->
+        <div
+          class="
+            mt-10
+            flex
+            flex-wrap
+            items-center
+            gap-3
+          "
+        >
+
+          <!-- Botão Criar conta -->
+          <a
+            href="./cadastro-de-usuario.html"
+            class="
+              inline-flex
+              h-[42px]
+              items-center
+              justify-center
+              gap-2
+              rounded-full
+              bg-[#DDE2E4]
+              px-6
+              text-[14px]
+              font-medium
+              text-[#202020]
+              transition
+              duration-200
+              hover:-translate-y-0.5
+              hover:bg-white
+              hover:shadow-lg
+              active:translate-y-0
+              focus-visible:outline
+              focus-visible:outline-2
+              focus-visible:outline-offset-2
+              focus-visible:outline-white
+            "
+          >
+            Criar conta
+
+            <span
+              class="text-[18px]"
+              aria-hidden="true"
+            >
+              →
+            </span>
+          </a>
+
+          <!-- Botão Entrar -->
+          <a
+            href="./login-usuario.html"
+            class="
+              inline-flex
+              h-[42px]
+              items-center
+              justify-center
+              gap-2
+              rounded-full
+              border
+              border-[#DDE2E4]
+              bg-transparent
+              px-7
+              text-[14px]
+              font-medium
+              text-[#DDE2E4]
+              transition
+              duration-200
+              hover:-translate-y-0.5
+              hover:bg-white/15
+              active:translate-y-0
+              focus-visible:outline
+              focus-visible:outline-2
+              focus-visible:outline-offset-2
+              focus-visible:outline-white
+            "
+          >
+            Entrar
+
+            <span
+              class="text-[18px]"
+              aria-hidden="true"
+            >
+              →
+            </span>
+          </a>
+
+        </div>
+
+        <!-- Nome do sistema -->
+        <p
+          class="
+            mt-8
+            text-[12px]
+            tracking-wide
+            text-[#DDE2E4]/80
+          "
+        >
+          7 dias grátis. Sem cartão de crédito.
+        </p>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</body>
+</html>

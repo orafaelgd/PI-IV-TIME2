@@ -9,7 +9,6 @@ public class ParametroDias {
 
     int dias = 7;
 
-
     String[] partesUrl = recurso.split("\\?", 2);
 
     if (partesUrl.length == 2) {
@@ -40,7 +39,7 @@ public class ParametroDias {
     }
 
     // Validação dos valores permitidos
-    if (dias != 1 && dias != 3 && dias != 7) {
+    if (dias != 1 && dias != 3 && dias != 7 && dias != 15 && dias != 30) {
       throw new IllegalArgumentException();
     }
 
