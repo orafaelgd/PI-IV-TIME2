@@ -1,5 +1,7 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,26 +9,88 @@
   <title>Login | PsicomManager</title>
 
   <link rel="stylesheet" href="../../public/css/style.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      margin: 0;
+      background-color: #E5E5E5;
+      background-image: url("../../public/images/fundo-login.jpeg");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      font-family: "Manrope", sans-serif;
+    }
+
+    .login-container {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .login-container > section {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .login-card {
+      display: block;
+      width: 100%;
+      padding: 40px 36px;
+      margin: 0;
+      background-color: #FFFFFF;
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.20);
+      box-sizing: border-box;
+    }
+
+    .login-card input {
+      display: block;
+      width: 100%;
+      background-color: #FFFFFF;
+      border: 1px solid #D6E2E4;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    .login-card input:focus {
+      border-color: #1F6F78;
+      outline: 2px solid rgba(31, 111, 120, 0.12);
+    }
+
+    .login-card input[aria-invalid="true"] {
+      border-color: #DC2626;
+    }
+
+    .login-card input::placeholder {
+      color: #9CA3AF;
+    }
+
+    @media (max-width: 480px) {
+      .login-container {
+        padding: 16px;
+      }
+
+      .login-card {
+        padding: 32px 24px;
+      }
+    }
+  </style>
 </head>
 
-<body class="min-h-screen bg-[#E5E5E5] font-sans">
+<body class="login-page">
 
-  <main
-    class="
-      flex
-      min-h-screen
-      items-center
-      justify-center
-      px-6
-      py-10
-    "
-  >
+  <main class="login-container">
 
     <section class="w-full max-w-[520px]">
 
       <form
         id="formLogin"
-        class="w-full"
+        class="login-card"
         novalidate
       >
 
@@ -36,7 +100,6 @@
             Login
           </h1>
         </div>
-
 
         <!-- E-mail -->
         <div class="mb-5">
@@ -64,7 +127,7 @@
               rounded-[4px]
               border
               border-border
-              bg-[#E2E7E8]
+              bg-white
               px-3
               text-[13px]
               text-text
@@ -87,7 +150,6 @@
           ></p>
 
         </div>
-
 
         <!-- Senha -->
         <div class="mb-2">
@@ -116,7 +178,7 @@
                 rounded-[4px]
                 border
                 border-border
-                bg-[#E2E7E8]
+                bg-white
                 px-3
                 pr-10
                 text-[13px]
@@ -143,6 +205,7 @@
                 text-primary-darker
               "
             >
+
               <svg
                 viewBox="0 0 24 24"
                 class="size-[18px]"
@@ -151,6 +214,7 @@
                 stroke-width="1.8"
                 aria-hidden="true"
               >
+
                 <path
                   d="M2.5 12s3.5-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.5 5.5-9.5 5.5S2.5 12 2.5 12Z"
                 ></path>
@@ -160,7 +224,9 @@
                   cy="12"
                   r="2.8"
                 ></circle>
+
               </svg>
+
             </button>
 
           </div>
@@ -176,7 +242,6 @@
           ></p>
 
         </div>
-
 
         <!-- Esqueceu a senha -->
         <div class="mb-6 text-right">
@@ -194,7 +259,6 @@
           </a>
 
         </div>
-
 
         <!-- Botão Entrar -->
         <button
@@ -216,7 +280,6 @@
         >
           Entrar
         </button>
-
 
         <!-- Criar conta -->
         <p class="mt-3 text-center">
@@ -241,9 +304,7 @@
 
   </main>
 
-  
   <script src="../../public/js/login-de-usuario.js"></script>
 
-
 </body>
-</html>
+  </html>
