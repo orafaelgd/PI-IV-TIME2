@@ -23,6 +23,7 @@ import controller.ProdutosHandler;
 import controller.RelatoriosHandler;
 import controller.UsuariosHandler;
 import controller.HistoricoDespHandler;
+import controller.RecuperacaoSenhaHandler;
 import controller.ProximosVencimentoHandler;
 
 // SERVIDOR SOCKET
@@ -57,6 +58,8 @@ public class Main {
                         MongoCollection<Document> usuarios = banco.getCollection("users");
 
                         MongoCollection<Document> sessoes = banco.getCollection("sessoes");
+                  
+                        MongoCollection<Document> recuperacoesSenha = banco.getCollection("recuperacoes_senha");
 
                         MongoCollection<Document> produtos = banco.getCollection("itens");
 
@@ -89,6 +92,12 @@ public class Main {
                                         new IndexOptions().expireAfter(
                                                         0L,
                                                         TimeUnit.SECONDS));
+                        
+                        recuperacoesSenha.createIndex(
+                                         Indexes.ascending("expiraEm"),
+                                         new IndexOptions().expireAfter(
+                                                         0L,
+                                                         TimeUnit.SECONDS));      
 
                         // ÍNDICE DE MOVIMENTAÇÕES
 
@@ -131,6 +140,18 @@ public class Main {
                         servidor.createContext(
                                         "/api/login",
                                         loginHandler);
+                  
+                        // RECUPERAÇÃO E REDEFINIÇÃO DE SENHA
+
+                        RecuperacaoSenhaHandler recuperacaoSenhaHandler =
+                            new RecuperacaoSenhaHandler(
+                                usuarios,
+                                sessoes,
+                                recuperacoesSenha);
+
+                        servidor.createContext(
+                            "/api/senha/",
+                            recuperacaoSenhaHandler);
 
                         servidor.createContext(
                                         "/api/logout",
