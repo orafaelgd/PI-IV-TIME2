@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let carregando = false;
   let erroCarregamento = false;
 
-  // Confirma que os elementos necessários existem na página.
+  // CONFIRMAR ELEMENTOS DA PÁGINA
 
   if (!tabela || !mensagem || !campoPesquisa) {
     console.error("Elementos da tela de vencimentos não encontrados.");
@@ -113,6 +113,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // considerando o fuso horário de São Paulo.
   // =====================================================
 
+  // FORMATAR DATA
+
   function formatarData(valor) {
     const data = String(valor || "").substring(0, 10);
 
@@ -125,14 +127,25 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${dia}/${mes}/${ano}`;
   }
 
-  function formatarQuantidade(quantidade, unidade) {
-    if (quantidade === null || quantidade === undefined || quantidade === "") {
+  // FORMATAR QUANTIDADE DISPONÍVEL
+  // EXIBIR SOMENTE O VALOR NUMÉRICO
+  // SEM G, KG, L, ML OU UN
+
+  function formatarQuantidade(quantidade) {
+    if (
+      quantidade === null ||
+      quantidade === undefined ||
+      quantidade === ""
+    ) {
       return "-";
     }
 
-    // Compatibilidade com valores Decimal128 do MongoDB.
+    // COMPATIBILIDADE COM DECIMAL128 DO MONGODB
 
-    if (typeof quantidade === "object" && "$numberDecimal" in quantidade) {
+    if (
+      typeof quantidade === "object" &&
+      "$numberDecimal" in quantidade
+    ) {
       quantidade = quantidade.$numberDecimal;
     }
 
@@ -142,12 +155,16 @@ document.addEventListener("DOMContentLoaded", () => {
       return "-";
     }
 
+    // RETORNAR SOMENTE O NÚMERO FORMATADO
+
     const valor = numero.toLocaleString("pt-BR", {
       maximumFractionDigits: 6,
     });
 
-    return `${valor} ${unidade || ""}`.trim();
+    return valor;
   }
+
+  // CALCULAR DIAS RESTANTES
 
   function calcularDiasRestantes(dataISO) {
     const data = String(dataISO || "").substring(0, 10);
@@ -160,6 +177,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const destino = Date.UTC(ano, mes - 1, dia);
 
+    // DATA ATUAL NO FUSO DE SÃO PAULO
+
     const partes = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Sao_Paulo",
       year: "numeric",
@@ -170,13 +189,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const obter = (tipo) =>
       Number(partes.find((parte) => parte.type === tipo).value);
 
-    const hoje = Date.UTC(obter("year"), obter("month") - 1, obter("day"));
+    const hoje = Date.UTC(
+      obter("year"),
+      obter("month") - 1,
+      obter("day")
+    );
 
     return Math.round((destino - hoje) / 86400000);
   }
 
-  // Classifica a situação do lote conforme a proximidade
-  // da data de validade, incluindo vencimentos anteriores.
+  // IDENTIFICAR SITUAÇÃO DO LOTE
+  // CONSIDERANDO A DATA DE VALIDADE
 
   function obterSituacao(lote) {
     const dias = calcularDiasRestantes(lote.dataValidade);
@@ -206,15 +229,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // e a criação das células utilizadas na listagem.
   // =====================================================
 
+  // MOSTRAR ERRO
+
   function mostrarErro(texto) {
     mensagem.textContent = texto;
     mensagem.classList.remove("hidden");
   }
 
+  // LIMPAR ERRO
+
   function limparErro() {
     mensagem.textContent = "";
     mensagem.classList.add("hidden");
   }
+
+  // MOSTRAR MENSAGEM NA TABELA
 
   function mostrarMensagemTabela(texto) {
     tabela.replaceChildren();
@@ -223,12 +252,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const celula = document.createElement("td");
 
     celula.colSpan = 5;
-    celula.className = "px-3 py-6 text-center text-text-secondary";
+    celula.className =
+      "px-3 py-6 text-center text-text-secondary";
+
     celula.textContent = texto;
 
     linha.appendChild(celula);
     tabela.appendChild(linha);
   }
+
+  // CRIAR CÉLULA
 
   function criarCelula(linha, texto, centralizar = false) {
     const celula = document.createElement("td");
@@ -243,6 +276,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     return celula;
   }
+
+  // CRIAR ELEMENTO DE TEXTO
 
   function criarTexto(tag, texto, classes) {
     const elemento = document.createElement(tag);
@@ -264,19 +299,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function abrirModalDetalhes(lote, botaoOrigem) {
 
-    // Impede a existência de dois modais simultâneos.
+    // IMPEDIR DOIS MODAIS ABERTOS
 
     if (modalAberto) {
       modalAberto.fechar();
     }
 
-    // Criação do fundo escurecido e da janela.
+    // CRIAR FUNDO ESCURECIDO
 
     const overlay = document.createElement("div");
 
     overlay.className =
       "fixed inset-0 z-50 flex items-center " +
       "justify-center bg-black/50 p-4";
+
+    // CRIAR JANELA DO MODAL
 
     const modal = document.createElement("section");
 
@@ -287,11 +324,12 @@ document.addEventListener("DOMContentLoaded", () => {
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
 
-    // Cabeçalho e identificação acessível do modal.
+    // CABEÇALHO DO MODAL
 
     const cabecalho = document.createElement("div");
 
-    cabecalho.className = "mb-5 flex items-center justify-between gap-4";
+    cabecalho.className =
+      "mb-5 flex items-center justify-between gap-4";
 
     const titulo = criarTexto(
       "h2",
@@ -303,24 +341,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
     modal.setAttribute("aria-labelledby", titulo.id);
 
+    // BOTÃO X
+
     const botaoX = document.createElement("button");
 
     botaoX.type = "button";
     botaoX.textContent = "×";
 
-    botaoX.className = "cursor-pointer text-2xl text-text-secondary";
+    botaoX.className =
+      "cursor-pointer text-2xl text-text-secondary";
 
-    botaoX.setAttribute("aria-label", "Fechar detalhes");
+    botaoX.setAttribute(
+      "aria-label",
+      "Fechar detalhes"
+    );
 
     cabecalho.append(titulo, botaoX);
 
-    // Descrição e situação do vencimento.
+    // DESCRIÇÃO DO MODAL
 
     const descricao = criarTexto(
       "p",
       "Informações do lote próximo ao vencimento.",
       "mb-5 text-xs text-text-secondary",
     );
+
+    // SITUAÇÃO DO VENCIMENTO
 
     const situacao = obterSituacao(lote);
 
@@ -330,13 +376,14 @@ document.addEventListener("DOMContentLoaded", () => {
       "mb-4 text-sm font-semibold text-text",
     );
 
-    // Área que apresenta as informações cadastradas.
+    // ÁREA DAS INFORMAÇÕES
 
     const informacoes = document.createElement("div");
 
-    informacoes.className = "rounded-md bg-[#e9ebee] px-4 py-2";
+    informacoes.className =
+      "rounded-md bg-[#e9ebee] px-4 py-2";
 
-    // Cria cada campo de informação do modal.
+    // ADICIONAR INFORMAÇÃO AO MODAL
 
     function adicionarCampo(rotulo, valor) {
       const linha = document.createElement("div");
@@ -345,7 +392,11 @@ document.addEventListener("DOMContentLoaded", () => {
         "flex items-start justify-between gap-4 " +
         "border-b border-gray-300 py-3";
 
-      const nome = criarTexto("span", rotulo, "text-xs text-text-secondary");
+      const nome = criarTexto(
+        "span",
+        rotulo,
+        "text-xs text-text-secondary"
+      );
 
       const conteudo = criarTexto(
         "strong",
@@ -354,31 +405,48 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       linha.append(nome, conteudo);
+
       informacoes.appendChild(linha);
     }
 
-    // Preenchimento das informações do lote selecionado.
+    // DADOS DO LOTE
 
-    adicionarCampo("Produto", lote.produtoNome || "Produto sem nome");
+    adicionarCampo(
+      "Produto",
+      lote.produtoNome || "Produto sem nome"
+    );
 
-    adicionarCampo("Código do lote", lote.codigo || "-");
+    adicionarCampo(
+      "Código do lote",
+      lote.codigo || "-"
+    );
+
+    // QUANTIDADE DISPONÍVEL NO MODAL
+    // EXIBIR SOMENTE O NÚMERO
 
     adicionarCampo(
       "Quantidade disponível",
-      formatarQuantidade(lote.quantidadeDisponivel, lote.unidadeMedida),
+      formatarQuantidade(lote.quantidadeDisponivel),
     );
 
-    adicionarCampo("Data de validade", formatarData(lote.dataValidade));
+    adicionarCampo(
+      "Data de validade",
+      formatarData(lote.dataValidade)
+    );
 
-    adicionarCampo("Situação", situacao);
+    adicionarCampo(
+      "Situação",
+      situacao
+    );
 
-    // Rodapé com botão de fechamento.
+    // RODAPÉ DO MODAL
 
     const rodape = document.createElement("div");
 
     rodape.className = "mt-6 flex justify-end";
 
-    const botaoFechar = document.createElement("button");
+    const botaoFechar =
+      document.createElement("button");
 
     botaoFechar.type = "button";
     botaoFechar.textContent = "Fechar";
@@ -389,27 +457,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     rodape.appendChild(botaoFechar);
 
-    // Montagem do modal na página.
+    // MONTAR MODAL
 
-    modal.append(cabecalho, descricao, status, informacoes, rodape);
+    modal.append(
+      cabecalho,
+      descricao,
+      status,
+      informacoes,
+      rodape
+    );
 
     overlay.appendChild(modal);
+
     document.body.appendChild(overlay);
 
-    // Impede a rolagem da página enquanto o modal estiver aberto.
+    // BLOQUEAR ROLAGEM DO FUNDO
 
-    const overflowAnterior = document.body.style.overflow;
+    const overflowAnterior =
+      document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
 
-    // Remove o modal e devolve o foco ao botão de origem.
+    // FECHAR MODAL
 
     function fechar() {
-      document.removeEventListener("keydown", tratarTeclado);
+      document.removeEventListener(
+        "keydown",
+        tratarTeclado
+      );
 
       overlay.remove();
 
-      document.body.style.overflow = overflowAnterior;
+      document.body.style.overflow =
+        overflowAnterior;
 
       modalAberto = null;
 
@@ -418,32 +498,44 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Controla a tecla Escape e a navegação por Tab
-    // para manter o foco dentro dos controles do modal.
+    // CONTROLE DO TECLADO
 
     function tratarTeclado(evento) {
+
+      // FECHAR COM ESCAPE
+
       if (evento.key === "Escape") {
         fechar();
         return;
       }
 
+      // MANTER FOCO DENTRO DO MODAL
+
       if (evento.key === "Tab") {
         const primeiro = botaoX;
         const ultimo = botaoFechar;
 
-        if (evento.shiftKey && document.activeElement === primeiro) {
+        if (
+          evento.shiftKey &&
+          document.activeElement === primeiro
+        ) {
           evento.preventDefault();
           ultimo.focus();
-        } else if (!evento.shiftKey && document.activeElement === ultimo) {
+
+        } else if (
+          !evento.shiftKey &&
+          document.activeElement === ultimo
+        ) {
           evento.preventDefault();
           primeiro.focus();
         }
       }
     }
 
-    // Eventos responsáveis pelo fechamento do modal.
+    // EVENTOS DE FECHAMENTO
 
     botaoX.addEventListener("click", fechar);
+
     botaoFechar.addEventListener("click", fechar);
 
     overlay.addEventListener("click", (evento) => {
@@ -452,7 +544,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    document.addEventListener("keydown", tratarTeclado);
+    document.addEventListener(
+      "keydown",
+      tratarTeclado
+    );
 
     modalAberto = { fechar };
 
@@ -469,29 +564,53 @@ document.addEventListener("DOMContentLoaded", () => {
   function criarLinha(lote) {
     const linha = document.createElement("tr");
 
-    linha.className = "border-b border-gray-300 bg-[#e9ebee] text-text";
+    linha.className =
+      "border-b border-gray-300 bg-[#e9ebee] text-text";
 
-    criarCelula(linha, lote.produtoNome || "Produto não encontrado");
-
-    criarCelula(linha, lote.codigo || "-");
+    // PRODUTO
 
     criarCelula(
       linha,
-      formatarQuantidade(lote.quantidadeDisponivel, lote.unidadeMedida),
+      lote.produtoNome || "Produto não encontrado"
+    );
+
+    // CÓDIGO DO LOTE
+
+    criarCelula(
+      linha,
+      lote.codigo || "-"
+    );
+
+    // QUANTIDADE DISPONÍVEL NA TABELA
+    // EXIBIR SOMENTE O NÚMERO
+
+    criarCelula(
+      linha,
+      formatarQuantidade(lote.quantidadeDisponivel),
       true,
     );
 
-    criarCelula(linha, formatarData(lote.dataValidade), true);
+    // DATA DE VALIDADE
 
-    // Criação do botão que abre os detalhes do lote.
+    criarCelula(
+      linha,
+      formatarData(lote.dataValidade),
+      true
+    );
+
+    // AÇÕES
 
     const celulaAcoes = document.createElement("td");
 
-    celulaAcoes.className = "px-3 py-3 text-center";
+    celulaAcoes.className =
+      "px-3 py-3 text-center";
 
     const grupo = document.createElement("div");
 
-    grupo.className = "flex items-center justify-center";
+    grupo.className =
+      "flex items-center justify-center";
+
+    // BOTÃO DETALHES
 
     const detalhes = document.createElement("button");
 
@@ -527,6 +646,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // entre letras maiúsculas, minúsculas e acentuação.
   // =====================================================
 
+  // NORMALIZAR TEXTO
+
   function normalizarTexto(texto) {
     return String(texto || "")
       .normalize("NFD")
@@ -535,26 +656,35 @@ document.addEventListener("DOMContentLoaded", () => {
       .trim();
   }
 
+  // FILTRAR PRODUTOS PELO NOME
+
   function filtrarProdutos() {
 
-    // Evita modificar a tabela durante o carregamento
-    // dos dados ou após uma falha na consulta.
+    // EVITAR ALTERAR A TABELA DURANTE O CARREGAMENTO
 
     if (carregando || erroCarregamento) {
       return;
     }
 
-    const pesquisa = normalizarTexto(campoPesquisa.value);
+    const pesquisa = normalizarTexto(
+      campoPesquisa.value
+    );
 
-    const lotesFiltrados = lotesCarregados.filter((lote) => {
-      const nomeProduto = normalizarTexto(lote.produtoNome);
+    const lotesFiltrados = lotesCarregados.filter(
+      (lote) => {
+        const nomeProduto = normalizarTexto(
+          lote.produtoNome
+        );
 
-      return nomeProduto.includes(pesquisa);
-    });
+        return nomeProduto.includes(pesquisa);
+      }
+    );
+
+    // LIMPAR TABELA
 
     tabela.replaceChildren();
 
-    // Apresenta mensagem quando a pesquisa não retorna lotes.
+    // NENHUM RESULTADO
 
     if (lotesFiltrados.length === 0) {
       mostrarMensagemTabela(
@@ -566,20 +696,26 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Atualiza a tabela com os produtos correspondentes.
+    // PREENCHER TABELA
 
-    const fragmento = document.createDocumentFragment();
+    const fragmento =
+      document.createDocumentFragment();
 
     lotesFiltrados.forEach((lote) => {
-      fragmento.appendChild(criarLinha(lote));
+      fragmento.appendChild(
+        criarLinha(lote)
+      );
     });
 
     tabela.appendChild(fragmento);
   }
 
-  // Atualiza a pesquisa automaticamente enquanto o usuário digita.
+  // PESQUISAR ENQUANTO DIGITA
 
-  campoPesquisa.addEventListener("input", filtrarProdutos);
+  campoPesquisa.addEventListener(
+    "input",
+    filtrarProdutos
+  );
 
   // =====================================================
   // CONTROLE VISUAL DOS FILTROS DE VENCIMENTO
@@ -589,18 +725,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function selecionarFiltro(botaoAtivo) {
     botoes.forEach((botao) => {
-      botao.classList.remove("bg-primary-dark", "text-white");
+      botao.classList.remove(
+        "bg-primary-dark",
+        "text-white"
+      );
 
-      botao.classList.add("bg-[#e9ebee]", "text-text");
+      botao.classList.add(
+        "bg-[#e9ebee]",
+        "text-text"
+      );
 
-      botao.setAttribute("aria-pressed", "false");
+      botao.setAttribute(
+        "aria-pressed",
+        "false"
+      );
     });
 
-    botaoAtivo.classList.remove("bg-[#e9ebee]", "text-text");
+    botaoAtivo.classList.remove(
+      "bg-[#e9ebee]",
+      "text-text"
+    );
 
-    botaoAtivo.classList.add("bg-primary-dark", "text-white");
+    botaoAtivo.classList.add(
+      "bg-primary-dark",
+      "text-white"
+    );
 
-    botaoAtivo.setAttribute("aria-pressed", "true");
+    botaoAtivo.setAttribute(
+      "aria-pressed",
+      "true"
+    );
   }
 
   // =====================================================
@@ -613,8 +767,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function carregarLotes(dias) {
 
-    // Cancela uma consulta anterior caso o usuário
-    // selecione outro período antes de sua conclusão.
+    // CANCELAR REQUISIÇÃO ANTERIOR
 
     if (requisicaoAtual) {
       requisicaoAtual.abort();
@@ -624,11 +777,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     requisicaoAtual = controlador;
 
+    // FECHAR MODAL ABERTO
+
     if (modalAberto) {
       modalAberto.fechar();
     }
 
-    // Reinicia os dados e apresenta o estado de carregamento.
+    // LIMPAR DADOS ANTERIORES
 
     lotesCarregados = [];
 
@@ -641,7 +796,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
 
-      // Consulta o backend com o período selecionado.
+      // CONSULTAR BACKEND COM AUTENTICAÇÃO
 
       const resposta = await requisicaoAutenticada(
         `${API_URL}?dias=${dias}`,
@@ -650,45 +805,59 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const dados = await lerResposta(resposta);
 
+      // IGNORAR REQUISIÇÕES CANCELADAS
+
       if (controlador.signal.aborted) {
         return;
       }
 
-      // Confere o formato recebido e armazena os lotes.
+      // VALIDAR DADOS RETORNADOS
 
       if (!Array.isArray(dados.lotes)) {
-        throw new Error("Resposta inválida do servidor.");
+        throw new Error(
+          "Resposta inválida do servidor."
+        );
       }
+
+      // ARMAZENAR LOTES
 
       lotesCarregados = dados.lotes;
 
       carregando = false;
 
-      // Aplica a pesquisa atual aos registros carregados.
+      // APLICAR PESQUISA ATUAL
 
       filtrarProdutos();
 
     } catch (erro) {
 
-      // Ignora cancelamentos intencionais de requisições.
+      // IGNORAR REQUISIÇÕES CANCELADAS
 
-      if (erro.name === "AbortError" || controlador.signal.aborted) {
+      if (
+        erro.name === "AbortError" ||
+        controlador.signal.aborted
+      ) {
         return;
       }
 
-      console.error("Erro ao carregar próximos vencimentos:", erro);
+      console.error(
+        "Erro ao carregar próximos vencimentos:",
+        erro
+      );
 
       lotesCarregados = [];
       erroCarregamento = true;
 
-      mostrarMensagemTabela("Não foi possível carregar os lotes.");
+      mostrarMensagemTabela(
+        "Não foi possível carregar os lotes."
+      );
 
       mostrarErro(erro.message);
 
     } finally {
 
-      // Somente a requisição mais recente pode atualizar
-      // o estado de carregamento da interface.
+      // SOMENTE A REQUISIÇÃO MAIS RECENTE
+      // PODE ATUALIZAR O ESTADO DO CARREGAMENTO
 
       if (requisicaoAtual === controlador) {
         carregando = false;
@@ -706,7 +875,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   botoes.forEach((botao) => {
     botao.addEventListener("click", () => {
-      const dias = Number(botao.dataset.dias);
+
+      const dias = Number(
+        botao.dataset.dias
+      );
+
+      // ACEITAR SOMENTE OS PERÍODOS DEFINIDOS
 
       if (!PERIODOS_VALIDOS.includes(dias)) {
         return;
@@ -729,7 +903,11 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const filtroInicial = document.querySelector('[data-dias="1"]');
+  // FILTRO INICIAL: HOJE
+
+  const filtroInicial = document.querySelector(
+    '[data-dias="1"]'
+  );
 
   if (filtroInicial) {
     selecionarFiltro(filtroInicial);
