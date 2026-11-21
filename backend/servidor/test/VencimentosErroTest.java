@@ -2,9 +2,10 @@
 
 package test;
 
-import controller.ProximosVencimentoHandler;
+import server.ServidorSocket;
 
-import com.sun.net.httpserver.HttpServer;
+import model.RepositorioVencimentos;
+import service.SessaoService;
 
 import com.mongodb.client.MongoCollection;
 
@@ -12,15 +13,13 @@ import org.bson.Document;
 
 import org.junit.jupiter.api.Test;
 
-import java.net.InetSocketAddress;
-import java.net.URI;
+import java.lang.reflect.Method;
 
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -46,74 +45,121 @@ public class VencimentosErroTest {
             mock(MongoCollection.class);
 
 
-        // Iniciar servidor HTTP temporário
-        HttpServer servidor = HttpServer.create(
-            new InetSocketAddress("127.0.0.1", 0),
-            0
-        );
-
-
-        // Registrar o endpoint de vencimentos
-        servidor.createContext(
-            "/api/lotes/proximos-vencimento",
-            new ProximosVencimentoHandler(
+        // Criar as classes reais do servidor
+        RepositorioVencimentos repositorio =
+            new RepositorioVencimentos(
                 lotes,
-                produtos,
+                produtos
+            );
+
+        SessaoService sessaoService =
+            new SessaoService(
                 usuarios,
                 sessoes
-            )
-        );
+            );
 
-        servidor.start();
-
-        try {
-
-            // Preparar a URL do endpoint
-            int porta =
-                servidor.getAddress().getPort();
-
-            String endereco =
-                "http://127.0.0.1:" + porta +
-                "/api/lotes/proximos-vencimento?dias=7";
+        ServidorSocket servidorSocket =
+            new ServidorSocket(
+                repositorio,
+                sessaoService,
+                0
+            );
 
 
-            // Criar requisição sem token
-            HttpRequest requisicao = HttpRequest
-                .newBuilder(URI.create(endereco))
-                .timeout(Duration.ofSeconds(10))
-                .GET()
-                .build();
+        // Criar conexão Socket temporária
+        try (
+            ServerSocket servidorTeste = new ServerSocket(
+                0,
+                1,
+                InetAddress.getByName("127.0.0.1")
+            );
+
+            Socket cliente = new Socket(
+                "127.0.0.1",
+                servidorTeste.getLocalPort()
+            );
+
+            Socket conexao = servidorTeste.accept()
+        ) {
+
+            cliente.setSoTimeout(5000);
 
 
-            // Enviar requisição HTTP real
-            HttpClient cliente =
-                HttpClient.newHttpClient();
+            // Preparar requisição sem autenticação
+            String requisicao =
+                "GET /api/lotes/proximos-vencimento?dias=7 HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
 
-            HttpResponse<String> resposta =
-                cliente.send(
-                    requisicao,
-                    HttpResponse.BodyHandlers.ofString(
-                        StandardCharsets.UTF_8
-                    )
+
+            // Enviar requisição pelo Socket
+            cliente.getOutputStream().write(
+                requisicao.getBytes(
+                    StandardCharsets.UTF_8
+                )
+            );
+
+            cliente.getOutputStream().flush();
+
+
+            // Executar o atendimento real do servidor
+            Method atenderCliente = ServidorSocket.class
+                .getDeclaredMethod(
+                    "atenderCliente",
+                    Socket.class
                 );
+
+            atenderCliente.setAccessible(true);
+
+            atenderCliente.invoke(
+                servidorSocket,
+                conexao
+            );
+
+
+            // Receber resposta HTTP
+            String respostaHttp = new String(
+                cliente.getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8
+            );
+
+
+            // Separar cabeçalho e corpo da resposta
+            String[] partesResposta =
+                respostaHttp.split("\r\n\r\n", 2);
+
+            assertEquals(
+                2,
+                partesResposta.length
+            );
 
 
             // Verificar retorno HTTP 401
-            assertEquals(
-                401,
-                resposta.statusCode()
+            assertTrue(
+                partesResposta[0].startsWith(
+                    "HTTP/1.1 401 Unauthorized"
+                )
             );
 
 
-            // Converter a resposta JSON
+            // Verificar o formato JSON
+            assertTrue(
+                partesResposta[0].contains(
+                    "Content-Type: application/json"
+                )
+            );
+
+
+            // Converter o JSON recebido
             Document json = Document.parse(
-                resposta.body()
+                partesResposta[1]
             );
 
 
-            // Verificar mensagem de erro
+            // Verificar mensagem de autenticação
             assertEquals(
-                "Sessão inválida ou expirada. Faça login novamente.",
+                "Sessao invalida ou expirada",
                 json.getString("erro")
             );
 
@@ -128,19 +174,13 @@ public class VencimentosErroTest {
             );
 
 
-            // Verificar que não houve consultas ao MongoDB
+            // Verificar que o banco não foi consultado
             verifyNoInteractions(
                 sessoes,
                 usuarios,
                 lotes,
                 produtos
             );
-
-        } finally {
-
-            // Encerrar servidor após o teste
-            servidor.stop(0);
-
         }
     }
 }

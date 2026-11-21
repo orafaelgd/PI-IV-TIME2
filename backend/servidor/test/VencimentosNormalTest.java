@@ -2,9 +2,10 @@
 
 package test;
 
-import controller.ProximosVencimentoHandler;
+import server.ServidorSocket;
 
-import com.sun.net.httpserver.HttpServer;
+import model.RepositorioVencimentos;
+import service.SessaoService;
 
 import com.mongodb.MongoClientSettings;
 import com.mongodb.client.FindIterable;
@@ -12,6 +13,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 
 import org.bson.BsonArray;
+import org.bson.BsonDateTime;
 import org.bson.BsonDocument;
 import org.bson.BsonObjectId;
 import org.bson.BsonString;
@@ -24,16 +26,18 @@ import org.bson.types.ObjectId;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+
+import java.net.ServerSocket;
+import java.net.Socket;
+
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
+
 import java.util.Date;
 import java.util.List;
 
@@ -43,7 +47,7 @@ import static org.mockito.Mockito.*;
 
 public class VencimentosNormalTest {
 
-    // Dados utilizados no cenário normal
+    // Dados fixos do usuário autenticado
     private final ObjectId usuarioId =
         new ObjectId("aaaaaaaaaaaaaaaaaaaaaaaa");
 
@@ -53,8 +57,7 @@ public class VencimentosNormalTest {
     private final ObjectId loteId =
         new ObjectId("cccccccccccccccccccccccc");
 
-    private final String token =
-        "token-valido-de-teste";
+    private final String token = "token-valido-de-teste";
 
     private final ZoneId fuso =
         ZoneId.of("America/Sao_Paulo");
@@ -79,11 +82,11 @@ public class VencimentosNormalTest {
             mock(MongoCollection.class);
 
 
-        // Simular as consultas do MongoDB
-        FindIterable<Document> buscaSessoes =
+        // Simular os resultados das consultas
+        FindIterable<Document> buscaUsuarios =
             mock(FindIterable.class);
 
-        FindIterable<Document> buscaUsuarios =
+        FindIterable<Document> buscaSessoes =
             mock(FindIterable.class);
 
         FindIterable<Document> buscaLotes =
@@ -97,18 +100,14 @@ public class VencimentosNormalTest {
 
 
         // Preparar usuário autenticado
-        Document usuario = new Document(
-            "_id", usuarioId
-        )
+        Document usuario = new Document("_id", usuarioId)
             .append("nome", "Usuário Teste")
             .append("email", "teste@example.com")
             .append("ativo", true);
 
 
         // Preparar sessão válida
-        Document sessao = new Document(
-            "token", token
-        )
+        Document sessao = new Document("token", token)
             .append("usuarioId", usuarioId)
             .append(
                 "expiraEm",
@@ -118,7 +117,7 @@ public class VencimentosNormalTest {
             );
 
 
-        // Simular autenticação da sessão
+        // Simular consulta da sessão
         when(sessoes.find(any(Bson.class)))
             .thenReturn(buscaSessoes);
 
@@ -134,20 +133,20 @@ public class VencimentosNormalTest {
             .thenReturn(usuario);
 
 
-        // Preparar lote com vencimento em dois dias
+        // Preparar data dentro do período
         LocalDate hoje = LocalDate.now(fuso);
 
         LocalDate vencimento = hoje.plusDays(2);
 
         Date dataValidade = Date.from(
             vencimento
-                .atStartOfDay(fuso)
+                .atStartOfDay(ZoneOffset.UTC)
                 .toInstant()
         );
 
-        Document lote = new Document(
-            "_id", loteId
-        )
+
+        // Preparar lote do usuário
+        Document lote = new Document("_id", loteId)
             .append("usuarioId", usuarioId)
             .append("itemId", itemId)
             .append("codigo", "LOTE001")
@@ -158,14 +157,11 @@ public class VencimentosNormalTest {
                     new BigDecimal("5.00")
                 )
             )
-            .append("arquivado", false)
-            .append("inativo", false);
+            .append("arquivado", false);
 
 
         // Preparar produto do mesmo usuário
-        Document produto = new Document(
-            "_id", itemId
-        )
+        Document produto = new Document("_id", itemId)
             .append("usuarioId", usuarioId)
             .append("nome", "Arroz")
             .append("unidadeMedida", "kg")
@@ -197,69 +193,108 @@ public class VencimentosNormalTest {
             .thenReturn(produto);
 
 
-        // Iniciar servidor HTTP temporário
-        HttpServer servidor = HttpServer.create(
-            new InetSocketAddress("127.0.0.1", 0),
-            0
-        );
-
-        servidor.createContext(
-            "/api/lotes/proximos-vencimento",
-            new ProximosVencimentoHandler(
+        // Criar as classes reais do servidor Socket
+        RepositorioVencimentos repositorio =
+            new RepositorioVencimentos(
                 lotes,
-                produtos,
+                produtos
+            );
+
+        SessaoService sessaoService =
+            new SessaoService(
                 usuarios,
                 sessoes
-            )
-        );
+            );
 
-        servidor.start();
-
-        try {
-
-            // Preparar a URL do endpoint
-            int porta = servidor.getAddress().getPort();
-
-            String endereco =
-                "http://127.0.0.1:" + porta +
-                "/api/lotes/proximos-vencimento?dias=7";
-
-
-            // Criar requisição autenticada
-            HttpRequest requisicao = HttpRequest
-                .newBuilder(URI.create(endereco))
-                .timeout(Duration.ofSeconds(10))
-                .header(
-                    "Authorization",
-                    "Bearer " + token
-                )
-                .GET()
-                .build();
-
-
-            // Enviar requisição HTTP real
-            HttpClient cliente = HttpClient
-                .newHttpClient();
-
-            HttpResponse<String> resposta =
-                cliente.send(
-                    requisicao,
-                    HttpResponse.BodyHandlers.ofString(
-                        StandardCharsets.UTF_8
-                    )
-                );
-
-
-            // Verificar retorno HTTP 200
-            assertEquals(
-                200,
-                resposta.statusCode()
+        ServidorSocket servidorSocket =
+            new ServidorSocket(
+                repositorio,
+                sessaoService,
+                0
             );
 
 
-            // Converter resposta JSON
+        // Criar conexão Socket temporária
+        try (
+            ServerSocket servidorTeste = new ServerSocket(
+                0,
+                1,
+                java.net.InetAddress.getByName("127.0.0.1")
+            );
+
+            Socket cliente = new Socket(
+                "127.0.0.1",
+                servidorTeste.getLocalPort()
+            );
+
+            Socket conexao = servidorTeste.accept()
+        ) {
+
+            cliente.setSoTimeout(5000);
+
+
+            // Montar requisição HTTP autenticada
+            String requisicao =
+                "GET /api/lotes/proximos-vencimento?dias=7 HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Authorization: Bearer " + token + "\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+
+            // Enviar a requisição pelo Socket
+            cliente.getOutputStream().write(
+                requisicao.getBytes(
+                    StandardCharsets.UTF_8
+                )
+            );
+
+            cliente.getOutputStream().flush();
+
+
+            // Executar o atendimento real do ServidorSocket
+            Method atenderCliente = ServidorSocket.class
+                .getDeclaredMethod(
+                    "atenderCliente",
+                    Socket.class
+                );
+
+            atenderCliente.setAccessible(true);
+
+            atenderCliente.invoke(
+                servidorSocket,
+                conexao
+            );
+
+
+            // Receber resposta HTTP do servidor
+            String respostaHttp = new String(
+                cliente.getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8
+            );
+
+
+            // Separar cabeçalho e corpo da resposta
+            String[] partesResposta =
+                respostaHttp.split("\r\n\r\n", 2);
+
+            assertEquals(
+                2,
+                partesResposta.length
+            );
+
+
+            // Verificar retorno HTTP 200
+            assertTrue(
+                partesResposta[0].startsWith(
+                    "HTTP/1.1 200 OK"
+                )
+            );
+
+
+            // Converter o JSON retornado
             Document json = Document.parse(
-                resposta.body()
+                partesResposta[1]
             );
 
 
@@ -334,7 +369,7 @@ public class VencimentosNormalTest {
             );
 
 
-            // Verificar autenticação pelo token
+            // Verificar consulta da sessão pelo token
             ArgumentCaptor<Bson> filtroSessao =
                 ArgumentCaptor.forClass(Bson.class);
 
@@ -355,15 +390,8 @@ public class VencimentosNormalTest {
                 )
             );
 
-            assertTrue(
-                obterCondicao(
-                    consultaSessao,
-                    "expiraEm"
-                ).asDocument().containsKey("$gt")
-            );
 
-
-            // Verificar usuário identificado pela sessão
+            // Verificar usuário associado à sessão
             ArgumentCaptor<Bson> filtroUsuario =
                 ArgumentCaptor.forClass(Bson.class);
 
@@ -373,13 +401,16 @@ public class VencimentosNormalTest {
 
             assertEquals(
                 new BsonObjectId(usuarioId),
-                converterFiltro(
-                    filtroUsuario.getValue()
-                ).get("_id")
+                obterCondicao(
+                    converterFiltro(
+                        filtroUsuario.getValue()
+                    ),
+                    "_id"
+                )
             );
 
 
-            // Verificar isolamento dos lotes por usuário
+            // Verificar filtro dos lotes por usuário
             ArgumentCaptor<Bson> filtroLotes =
                 ArgumentCaptor.forClass(Bson.class);
 
@@ -401,7 +432,19 @@ public class VencimentosNormalTest {
             );
 
 
-            // Verificar filtro de período
+            // Verificar intervalo de vencimento
+            Date inicioEsperado = Date.from(
+                hoje.atStartOfDay(
+                    ZoneOffset.UTC
+                ).toInstant()
+            );
+
+            Date fimEsperado = Date.from(
+                hoje.plusDays(7)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+            );
+
             BsonArray condicoes =
                 consultaLotes.getArray("$and");
 
@@ -410,27 +453,43 @@ public class VencimentosNormalTest {
             boolean encontrouInicio = false;
             boolean encontrouFim = false;
 
-            for (BsonValue condicao : condicoes) {
+            for (BsonValue valor : condicoes) {
 
-                BsonDocument documento =
-                    condicao.asDocument();
+                BsonDocument condicao =
+                    valor.asDocument();
 
-                if (!documento.containsKey(
+                if (!condicao.containsKey(
                     "dataValidade"
                 )) {
                     continue;
                 }
 
                 BsonDocument data =
-                    documento.getDocument(
+                    condicao.getDocument(
                         "dataValidade"
                     );
 
                 if (data.containsKey("$gte")) {
+
+                    assertEquals(
+                        new BsonDateTime(
+                            inicioEsperado.getTime()
+                        ),
+                        data.get("$gte")
+                    );
+
                     encontrouInicio = true;
                 }
 
                 if (data.containsKey("$lt")) {
+
+                    assertEquals(
+                        new BsonDateTime(
+                            fimEsperado.getTime()
+                        ),
+                        data.get("$lt")
+                    );
+
                     encontrouFim = true;
                 }
             }
@@ -439,23 +498,23 @@ public class VencimentosNormalTest {
             assertTrue(encontrouFim);
 
 
-            // Verificar isolamento dos produtos por usuário
-            ArgumentCaptor<Bson> filtroProdutos =
+            // Verificar produto do mesmo usuário
+            ArgumentCaptor<Bson> filtroProduto =
                 ArgumentCaptor.forClass(Bson.class);
 
             verify(produtos).find(
-                filtroProdutos.capture()
+                filtroProduto.capture()
             );
 
-            BsonDocument consultaProdutos =
+            BsonDocument consultaProduto =
                 converterFiltro(
-                    filtroProdutos.getValue()
+                    filtroProduto.getValue()
                 );
 
             assertEquals(
                 new BsonObjectId(usuarioId),
                 obterCondicao(
-                    consultaProdutos,
+                    consultaProduto,
                     "usuarioId"
                 )
             );
@@ -463,21 +522,15 @@ public class VencimentosNormalTest {
             assertEquals(
                 new BsonObjectId(itemId),
                 obterCondicao(
-                    consultaProdutos,
+                    consultaProduto,
                     "_id"
                 )
             );
-
-        } finally {
-
-            // Encerrar servidor após o teste
-            servidor.stop(0);
-
         }
     }
 
 
-    // Converter filtro MongoDB para BSON
+    // Converter filtro do MongoDB para BSON
     private BsonDocument converterFiltro(
         Bson filtro
     ) {
@@ -489,7 +542,7 @@ public class VencimentosNormalTest {
     }
 
 
-    // Recuperar condição de um filtro AND
+    // Recuperar uma condição do filtro
     private BsonValue obterCondicao(
         BsonDocument filtro,
         String campo
