@@ -1,19 +1,53 @@
+<!-- CABEÇALHO DO SISTEMA ECOSTOCK -->
 <header class="px-3 pt-3 sm:pt-5">
-  <div class="flex min-h-8 items-center justify-between gap-2 sm:gap-3 rounded-md border border-gray-400 bg-gray-200 px-2.5 py-2 shadow-sm sm:py-1">
+
+  <!-- CONTAINER PRINCIPAL DO CABEÇALHO -->
+  <div class="flex min-h-8 items-center justify-between gap-2 rounded-md border border-gray-400 bg-gray-200 px-2.5 py-2 shadow-sm sm:gap-3 sm:py-1">
+
+    <!-- TÍTULO DO SISTEMA -->
     <h1 class="min-w-0 break-words text-sm font-semibold leading-tight text-text sm:text-base">
       Sistema de Gestão e Redução de Desperdício
     </h1>
 
+    <!-- ÁREA DOS BOTÕES -->
     <div class="flex shrink-0 items-center gap-2 text-white">
-      <span class="flex size-6 items-center justify-center rounded-full bg-primary-darker" role="img" aria-label="Perfil">
-        <img src="../../public/icons/profile.svg" alt="" width="20" height="20" class="size-5">
-      </span>
 
-      <span class="flex size-6 items-center justify-center rounded bg-primary-darker" role="img" aria-label="Início">
-        <img src="../../public/icons/home.svg" alt="" width="20" height="20" class="size-5">
-      </span>
+      <!-- BOTÃO DE PERFIL -->
+      <!-- Direciona para a tela de dados do usuário -->
+      <a
+        href="/views/pages/dados-do-usuario.html"
+        class="flex size-6 items-center justify-center rounded-full bg-primary-darker transition-colors hover:bg-primary-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        aria-label="Meu Perfil"
+        title="Meu Perfil"
+      >
+        <img
+          src="/public/icons/profile.svg"
+          alt=""
+          width="20"
+          height="20"
+          class="size-5"
+        >
+      </a>
+
+      <!-- BOTÃO DE INÍCIO -->
+      <!-- Direciona para a tela Dashboard -->
+      <a
+        href="/views/pages/dashboard.html"
+        class="flex size-6 items-center justify-center rounded bg-primary-darker transition-colors hover:bg-primary-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        aria-label="Ir para o Dashboard"
+        title="Dashboard"
+      >
+        <img
+          src="/public/icons/home.svg"
+          alt=""
+          width="20"
+          height="20"
+          class="size-5"
+        >
+      </a>
 
     </div>
 
   </div>
+
 </header>
