@@ -1,12 +1,20 @@
+
+<!-- Código feito por Miriã Nascimento dos Anjos RA: 25892704 -->
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
+
   <title>Redefinir senha | PsicomManager</title>
+
+  <!-- Estilização da página -->
   <link rel="stylesheet" href="../../public/css/style.css">
+
   <style>
+    /* Fundo da página */
     .login-page {
       min-height: 100vh;
       margin: 0;
@@ -17,6 +25,8 @@
       background-repeat: no-repeat;
       font-family: "Manrope", sans-serif;
     }
+
+    /* Centralização do formulário */
     .login-container {
       display: flex;
       width: 100%;
@@ -26,7 +36,10 @@
       padding: 24px;
       box-sizing: border-box;
     }
+
     .login-container > section { width: 100%; max-width: 420px; margin: 0 auto; }
+
+    /* Estilo do card */
     .login-card {
       display: block;
       width: 100%;
@@ -37,6 +50,8 @@
       box-shadow: 0 8px 28px rgba(0, 0, 0, .20);
       box-sizing: border-box;
     }
+
+    /* Campos de senha */
     .login-card input {
       display: block;
       width: 100%;
@@ -49,9 +64,12 @@
       font-size: 13px;
       color: #1F2937;
     }
+
     .login-card input:focus { border-color: #1F6F78; outline: 2px solid rgba(31,111,120,.12); }
     .login-card input[aria-invalid="true"] { border-color: #DC2626; }
     .login-card input::placeholder { color: #9CA3AF; }
+
+    /* Textos e mensagens */
     .login-title { font-size: 26px; font-weight: 600; color: #1F2937; margin: 0 0 14px; }
     .login-description { font-size: 13px; line-height: 1.6; color: #6B7280; margin: 0 0 24px; }
     .login-field { margin-bottom: 18px; }
@@ -59,6 +77,8 @@
     .login-error { margin-top: 6px; font-size: 12px; color: #DC2626; }
     .login-feedback { margin: 14px 0; font-size: 13px; line-height: 1.6; color: #195A61; }
     .login-error[hidden], .login-feedback[hidden], .login-card [hidden] { display: none !important; }
+
+    /* Botões do formulário */
     .login-button {
       display: flex;
       width: 100%;
@@ -72,42 +92,74 @@
       font-size: 16px;
       cursor: pointer;
     }
+
     .login-button:hover { background: #123F43; }
     .login-button:disabled { opacity: .65; cursor: wait; }
+
+    /* Link para voltar ao login */
     .login-link { display: block; margin-top: 16px; text-align: center; font-size: 12px; color: #6B7280; text-decoration: underline; }
+
+    /* Ajustes para telas menores */
     @media (max-width: 480px) {
       .login-container { padding: 16px; }
       .login-card { padding: 32px 24px; }
     }
   </style>
 </head>
+
 <body class="login-page">
+
+  <!-- Conteúdo principal -->
   <main class="login-container">
     <section>
+
+      <!-- Formulário de redefinição de senha -->
       <form id="formRedefinirSenha" class="login-card" novalidate>
-  <div id="etapaFormulario">
-    <h1 class="login-title">Redefinir senha</h1>
-    <p class="login-description">Crie uma nova senha de pelo menos 8 caracteres.</p>
-    <div class="login-field">
-      <label for="novaSenha">Nova senha</label>
-      <input id="novaSenha" type="password" name="novaSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Digite a nova senha" aria-describedby="erroSenha">
-    </div>
-    <div class="login-field">
-      <label for="confirmarSenha">Confirme a nova senha</label>
-      <input id="confirmarSenha" type="password" name="confirmarSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Repita a nova senha">
-      <p id="erroSenha" class="login-error" role="alert" hidden></p>
-    </div>
-    <button id="btnRedefinir" type="submit" class="login-button">Redefinir senha</button>
-    <a class="login-link" href="login-usuario.html">Voltar para o Login</a>
-  </div>
-  <div id="etapaSucesso" hidden>
-    <h1 class="login-title">Senha redefinida!</h1>
-    <p class="login-description">Sua senha foi alterada com sucesso. Clique em OK para voltar ao Login.</p>
-    <button id="btnOk" type="button" class="login-button">OK</button>
-  </div>
-</form>
+
+        <!-- Etapa para cadastrar a nova senha -->
+        <div id="etapaFormulario">
+
+          <h1 class="login-title">Redefinir senha</h1>
+          <p class="login-description">Crie uma nova senha de pelo menos 8 caracteres.</p>
+
+          <!-- Campo da nova senha -->
+          <div class="login-field">
+            <label for="novaSenha">Nova senha</label>
+            <input id="novaSenha" type="password" name="novaSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Digite a nova senha" aria-describedby="erroSenha">
+          </div>
+
+          <!-- Confirmação da nova senha -->
+          <div class="login-field">
+            <label for="confirmarSenha">Confirme a nova senha</label>
+            <input id="confirmarSenha" type="password" name="confirmarSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Repita a nova senha">
+            <p id="erroSenha" class="login-error" role="alert" hidden></p>
+          </div>
+
+          <!-- Botão para salvar a nova senha -->
+          <button id="btnRedefinir" type="submit" class="login-button">Redefinir senha</button>
+
+          <!-- Voltar para o login -->
+          <a class="login-link" href="login-usuario.html">Voltar para o Login</a>
+
+        </div>
+
+        <!-- Mensagem exibida após a redefinição -->
+        <div id="etapaSucesso" hidden>
+
+          <h1 class="login-title">Senha redefinida!</h1>
+          <p class="login-description">Sua senha foi alterada com sucesso. Clique em OK para voltar ao Login.</p>
+
+          <!-- Botão para retornar ao login -->
+          <button id="btnOk" type="button" class="login-button">OK</button>
+
+        </div>
+
+      </form>
     </section>
   </main>
+
+  <!-- Script responsável pela redefinição de senha -->
   <script src="../../public/js/redefinir-senha.js"></script>
+
 </body>
 </html>

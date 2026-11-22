@@ -1,16 +1,13 @@
 
-// HISTÓRICO DE SAÍDA
-// AUTENTICAÇÃO, PAGINAÇÃO, FILTROS, PESQUISA E DESCRIÇÃO
+ // Código feito por Miriã Nascimento dos Anjos RA: 25892704
 
 document.addEventListener("DOMContentLoaded", () => {
 
-    // CONFIGURAÇÕES
-
+    // Configurações da API e da página de login
     const API_URL = "http://localhost:8080";
     const PAGINA_LOGIN = "login-usuario.html";
 
-    // MOTIVOS DISPONÍVEIS
-
+    // Motivos disponíveis para filtrar o histórico
     const MOTIVOS_VALIDOS = [
         "Todos",
         "Consumido",
@@ -20,8 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Outro"
     ];
 
-    // ELEMENTOS DA TELA
-
+    // Elementos utilizados para exibir e filtrar os registros
     const tabela = document.getElementById(
         "historico-desperdicio"
     );
@@ -37,8 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const botoesMotivo =
         document.querySelectorAll("[data-motivo]");
 
-    // ELEMENTOS DO MODAL
-
+    // Elementos responsáveis pela janela de descrição das saídas
     const modalDescricao = document.getElementById(
         "modalDescricao"
     );
@@ -55,8 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "fecharModalDescricaoX"
     );
 
-    // VARIÁVEIS
-
+    // Armazena os registros, o filtro selecionado e o estado da tela
     let registrosCarregados = [];
 
     let motivoSelecionado = "Todos";
@@ -67,8 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let botaoOrigemModal = null;
     let overflowAnterior = "";
 
-    // VALIDAR ELEMENTOS
-
+    // Verifica se todos os elementos necessários estão presentes na página
     if (
         !tabela ||
         !mensagemErro ||
@@ -87,15 +80,13 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
-    // AUTENTICAÇÃO
-
+    // Recupera o token de autenticação armazenado na sessão
     function obterToken() {
 
         return sessionStorage.getItem("token");
     }
 
-    // ENCERRAR SESSÃO
-
+    // Remove os dados da sessão e redireciona o usuário para o login
     function encerrarAcesso() {
 
         sessionStorage.removeItem("token");
@@ -104,8 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.replace(PAGINA_LOGIN);
     }
 
-    // REQUISIÇÃO AUTENTICADA
-
+    // Realiza requisições à API utilizando o token do usuário autenticado
     async function requisicaoAutenticada(url) {
 
         const token = obterToken();
@@ -119,8 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         }
 
-        // ENVIAR TOKEN DA CONTA LOGADA
-
+        // Envia o token no cabeçalho para permitir a consulta dos registros
         const resposta = await fetch(url, {
 
             method: "GET",
@@ -133,8 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
             cache: "no-store"
         });
 
-        // SESSÃO EXPIRADA
-
+        // Redireciona para o login caso a sessão esteja inválida ou expirada
         if (resposta.status === 401) {
 
             encerrarAcesso();
@@ -143,8 +131,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 "Sessão inválida ou expirada."
             );
         }
-
-        // ACESSO NEGADO
 
         if (resposta.status === 403) {
 
@@ -156,8 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return resposta;
     }
 
-    // LER RESPOSTA DA API
-
+    // Lê a resposta da API e verifica se ocorreu algum erro na requisição
     async function lerResposta(resposta) {
 
         const texto = await resposta.text();
@@ -190,16 +175,14 @@ document.addEventListener("DOMContentLoaded", () => {
         return dados;
     }
 
-    // FORMATAR DATA
-
+    // Converte as datas recebidas para o formato brasileiro
     function formatarData(data) {
 
         if (!data) {
             return "-";
         }
 
-        // DATA SOMENTE COM ANO, MÊS E DIA
-
+        // Trata datas que possuem apenas ano, mês e dia
         if (
             typeof data === "string" &&
             /^\d{4}-\d{2}-\d{2}$/.test(data)
@@ -210,8 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return `${dia}/${mes}/${ano}`;
         }
 
-        // DATA COMPLETA
-
+        // Formata datas completas considerando o fuso horário de São Paulo
         const dataConvertida = new Date(data);
 
         if (
@@ -232,9 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }).format(dataConvertida);
     }
 
-    // FORMATAR QUANTIDADE DE SAÍDA
-    // MOSTRAR SOMENTE O NÚMERO
-
+    // Formata a quantidade de saída sem apresentar a unidade de medida
     function formatarQuantidade(quantidade) {
 
         if (
@@ -245,8 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return "-";
         }
 
-        // COMPATIBILIDADE COM DECIMAL128
-
+        // Trata valores Decimal128 que podem ser retornados pelo MongoDB
         if (
             typeof quantidade === "object" &&
             "$numberDecimal" in quantidade
@@ -269,8 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // MOSTRAR ERRO
-
+    // Exibe mensagens de erro quando ocorre alguma falha
     function mostrarErro(texto) {
 
         mensagemErro.textContent = texto;
@@ -278,8 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
         mensagemErro.classList.remove("hidden");
     }
 
-    // LIMPAR ERRO
-
+    // Limpa as mensagens de erro exibidas anteriormente
     function limparErro() {
 
         mensagemErro.textContent = "";
@@ -287,8 +264,7 @@ document.addEventListener("DOMContentLoaded", () => {
         mensagemErro.classList.add("hidden");
     }
 
-    // CRIAR CÉLULA
-
+    // Cria uma célula da tabela e define seu alinhamento
     function criarCelula(
         linha,
         texto,
@@ -308,8 +284,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return celula;
     }
 
-    // MOSTRAR MENSAGEM NA TABELA
-
+    // Mostra mensagens na tabela durante o carregamento ou quando não há registros
     function mostrarMensagem(texto) {
 
         tabela.replaceChildren();
@@ -317,8 +292,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const linha = document.createElement("tr");
 
         const coluna = document.createElement("td");
-
-        // SEIS COLUNAS NO HISTÓRICO
 
         coluna.colSpan = 6;
 
@@ -332,8 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.appendChild(linha);
     }
 
-    // VERIFICAR SE O MODAL ESTÁ ABERTO
-
+    // Verifica se a janela de descrição está aberta
     function modalEstaAberto() {
 
         return !modalDescricao.classList.contains(
@@ -341,64 +313,48 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // ABRIR MODAL DE DESCRIÇÃO
-
+    // Abre o modal com a descrição da saída selecionada
     function abrirModalDescricao(registro, botaoOrigem) {
 
-        // GUARDAR BOTÃO QUE ABRIU O MODAL
-
+        // Guarda o botão que abriu o modal para devolver o foco ao fechar
         botaoOrigemModal = botaoOrigem;
 
-        // RECUPERAR DESCRIÇÃO DA SAÍDA
-
+        // Recupera a observação registrada no banco de dados
         const descricao =
             typeof registro.observacao === "string"
                 ? registro.observacao.trim()
                 : "";
 
-        // EXIBIR DESCRIÇÃO DO MONGODB
-
         textoModalDescricao.textContent =
             descricao ||
             "Nenhuma descrição registrada para esta saída.";
 
-        // ABRIR MODAL
-
+        // Exibe o modal e bloqueia a rolagem da página ao fundo
         modalDescricao.classList.remove("hidden");
         modalDescricao.classList.add("flex");
-
-        // BLOQUEAR ROLAGEM DO FUNDO
 
         overflowAnterior =
             document.body.style.overflow;
 
         document.body.style.overflow = "hidden";
 
-        // POSICIONAR FOCO
-
         fecharModalDescricaoX.focus();
     }
 
-    // FECHAR MODAL
-
+    // Fecha a janela de descrição e restaura o estado da página
     function fecharModal() {
 
         if (!modalEstaAberto()) {
             return;
         }
 
-        // OCULTAR MODAL
-
         modalDescricao.classList.add("hidden");
         modalDescricao.classList.remove("flex");
-
-        // RESTAURAR ROLAGEM
 
         document.body.style.overflow =
             overflowAnterior;
 
-        // DEVOLVER FOCO AO BOTÃO ORIGINAL
-
+        // Devolve o foco ao botão utilizado para abrir a descrição
         if (
             botaoOrigemModal &&
             botaoOrigemModal.isConnected
@@ -410,21 +366,16 @@ document.addEventListener("DOMContentLoaded", () => {
         botaoOrigemModal = null;
     }
 
-    // FECHAR MODAL PELO X
-
+    // Permite fechar o modal pelos botões ou clicando fora da janela
     fecharModalDescricaoX.addEventListener(
         "click",
         fecharModal
     );
 
-    // FECHAR MODAL PELO BOTÃO FECHAR
-
     fecharModalDescricao.addEventListener(
         "click",
         fecharModal
     );
-
-    // FECHAR AO CLICAR NO FUNDO
 
     modalDescricao.addEventListener(
         "click",
@@ -437,16 +388,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     );
 
-    // CONTROLAR TECLADO DO MODAL
-
+    // Controla a navegação pelo teclado enquanto o modal estiver aberto
     document.addEventListener("keydown", (evento) => {
 
         if (!modalEstaAberto()) {
             return;
         }
 
-        // FECHAR COM ESCAPE
-
+        // Permite fechar a janela utilizando a tecla Escape
         if (evento.key === "Escape") {
 
             evento.preventDefault();
@@ -456,8 +405,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // MANTER FOCO DENTRO DO MODAL
-
+        // Mantém a navegação por Tab entre os botões do modal
         if (evento.key === "Tab") {
 
             const primeiro = fecharModalDescricaoX;
@@ -484,35 +432,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // CRIAR LINHA DO HISTÓRICO
-
+    // Monta uma linha da tabela com os dados de cada saída registrada
     function criarLinha(registro) {
 
         const linha = document.createElement("tr");
 
-        // PADRÃO VISUAL DA TABELA
-
         linha.className =
             "border-b border-gray-300 bg-[#e9ebee] text-text";
 
-        // RESPONSÁVEL PELO REGISTRO
-
+        // Identifica se a saída foi registrada pelo sistema ou por um usuário
         const responsavel =
             registro.origem === "AUTOMATICA"
                 ? "Sistema"
                 : registro.responsavelNome ||
                   "Não informado";
 
-        // PRODUTO
-
+        // Adiciona as informações principais da saída na tabela
         criarCelula(
             linha,
             registro.produtoNome ||
             "Produto não identificado"
         );
-
-        // QUANTIDADE DE SAÍDA
-        // SEM UNIDADE DE MEDIDA
 
         criarCelula(
             linha,
@@ -522,15 +462,11 @@ document.addEventListener("DOMContentLoaded", () => {
             true
         );
 
-        // MOTIVO
-
         criarCelula(
             linha,
             registro.motivo || "-",
             true
         );
-
-        // DATA
 
         criarCelula(
             linha,
@@ -540,23 +476,18 @@ document.addEventListener("DOMContentLoaded", () => {
             true
         );
 
-        // REGISTRADO POR
-
         criarCelula(
             linha,
             responsavel,
             true
         );
 
-        // COLUNA DE DETALHES
-
+        // Cria o botão para visualizar a descrição do registro
         const celulaDetalhes =
             document.createElement("td");
 
         celulaDetalhes.className =
             "px-3 py-3 text-center";
-
-        // BOTÃO DESCRIÇÃO
 
         const botaoDescricao =
             document.createElement("button");
@@ -574,8 +505,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }`
         );
 
-        // ABRIR MODAL COM A DESCRIÇÃO DA LINHA
-
+        // Abre o modal com as informações da saída escolhida
         botaoDescricao.addEventListener(
             "click",
             () => {
@@ -596,8 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return linha;
     }
 
-    // NORMALIZAR TEXTO DA PESQUISA
-
+    // Padroniza o texto para facilitar pesquisas sem diferenciar acentos ou maiúsculas
     function normalizarTexto(texto) {
 
         return String(texto || "")
@@ -607,11 +536,8 @@ document.addEventListener("DOMContentLoaded", () => {
             .trim();
     }
 
-    // SELECIONAR FILTRO DE MOTIVO
-
+    // Atualiza o destaque visual do botão de filtro selecionado
     function selecionarFiltro(botaoAtivo) {
-
-        // REMOVER DESTAQUE DOS OUTROS BOTÕES
 
         botoesMotivo.forEach((botao) => {
 
@@ -623,8 +549,6 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         });
 
-        // DESTACAR O FILTRO SELECIONADO
-
         botaoAtivo.classList.add("ativo");
 
         botaoAtivo.setAttribute(
@@ -633,12 +557,10 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // FILTRAR HISTÓRICO
-
+    // Filtra os registros carregados pelo nome do produto e pelo motivo da saída
     function filtrarHistorico() {
 
-        // NÃO ALTERAR DURANTE CARREGAMENTO OU ERRO
-
+        // Evita atualizar a tabela durante o carregamento ou após um erro
         if (
             carregandoHistorico ||
             erroCarregamento
@@ -646,20 +568,15 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // FECHAR MODAL ANTES DE ATUALIZAR A TABELA
-
+        // Fecha a descrição aberta antes de atualizar os resultados
         if (modalEstaAberto()) {
 
             fecharModal();
         }
 
-        // RECUPERAR NOME PESQUISADO
-
         const pesquisa = normalizarTexto(
             campoPesquisa.value
         );
-
-        // FILTRAR POR PRODUTO E MOTIVO
 
         const registrosFiltrados =
             registrosCarregados.filter((registro) => {
@@ -687,12 +604,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
             });
 
-        // LIMPAR TABELA
-
         tabela.replaceChildren();
 
-        // NENHUM RESULTADO
-
+        // Informa quando nenhum registro corresponde aos filtros escolhidos
         if (registrosFiltrados.length === 0) {
 
             mostrarMensagem(
@@ -704,8 +618,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // PREENCHER TABELA
-
+        // Preenche a tabela com os registros encontrados
         const fragmento =
             document.createDocumentFragment();
 
@@ -719,43 +632,32 @@ document.addEventListener("DOMContentLoaded", () => {
         tabela.appendChild(fragmento);
     }
 
-    // EVENTO DA BARRA DE PESQUISA
-
+    // Atualiza os resultados conforme o usuário digita na barra de pesquisa
     campoPesquisa.addEventListener(
         "input",
         filtrarHistorico
     );
 
-    // EVENTOS DOS FILTROS DE MOTIVO
-
+    // Aplica o filtro de motivo escolhido pelo usuário
     botoesMotivo.forEach((botao) => {
 
         botao.addEventListener("click", () => {
 
             const motivo = botao.dataset.motivo;
 
-            // VALIDAR MOTIVO
-
             if (!MOTIVOS_VALIDOS.includes(motivo)) {
                 return;
             }
 
-            // ATUALIZAR FILTRO
-
             motivoSelecionado = motivo;
 
-            // DESTACAR BOTÃO
-
             selecionarFiltro(botao);
-
-            // ATUALIZAR RESULTADOS
 
             filtrarHistorico();
         });
     });
 
-    // CARREGAR HISTÓRICO DO MONGODB
-
+    // Busca o histórico de saídas na API e prepara os registros para a tabela
     async function carregarHistorico() {
 
         limparErro();
@@ -776,8 +678,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let pagina = 1;
             let total = 0;
 
-            // CONSULTAR TODAS AS PÁGINAS
-
+            // Consulta todas as páginas para carregar o histórico completo
             do {
 
                 const parametros =
@@ -787,8 +688,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         somenteDesperdicio: "false"
                     });
 
-                // CONSULTAR COM AUTENTICAÇÃO
-
                 const resposta =
                     await requisicaoAutenticada(
                         `${API_URL}/api/saidas?${parametros.toString()}`
@@ -797,8 +696,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const dados =
                     await lerResposta(resposta);
 
-                // VALIDAR RESPOSTA
-
+                // Confere se os dados retornados possuem o formato esperado
                 if (
                     !Array.isArray(dados.itens) ||
                     !Number.isSafeInteger(
@@ -816,12 +714,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 total = Number(dados.total);
 
-                // ARMAZENAR SAÍDAS
-
                 registros.push(...itens);
 
-                // CONFERIR PAGINAÇÃO
-
+                // Verifica se a paginação está retornando todos os registros
                 if (
                     itens.length === 0 &&
                     registros.length < total
@@ -836,18 +731,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } while (registros.length < total);
 
-            // GUARDAR REGISTROS PARA A PESQUISA
-
+            // Guarda os dados carregados e aplica os filtros da tela
             registrosCarregados = registros;
 
             carregandoHistorico = false;
-
-            // APLICAR FILTROS
 
             filtrarHistorico();
 
         } catch (erro) {
 
+            // Exibe uma mensagem caso não seja possível consultar o histórico
             console.error(
                 "Erro ao carregar histórico:",
                 erro
@@ -868,10 +761,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // INICIALIZAÇÃO
-
-    // VERIFICAR TOKEN DA CONTA
-
+    // Verifica se existe uma sessão antes de iniciar o carregamento
     if (!obterToken()) {
 
         encerrarAcesso();
@@ -879,8 +769,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
-    // FILTRO INICIAL: TODOS
-
+    // Seleciona o filtro "Todos" como padrão ao abrir a página
     const filtroInicial =
         document.querySelector(
             '[data-motivo="Todos"]'
@@ -891,7 +780,6 @@ document.addEventListener("DOMContentLoaded", () => {
         selecionarFiltro(filtroInicial);
     }
 
-    // CARREGAR HISTÓRICO
-
+    // Inicia a consulta dos registros do histórico
     carregarHistorico();
 });

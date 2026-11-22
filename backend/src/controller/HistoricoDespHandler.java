@@ -1,3 +1,4 @@
+// Código feito por Miriã Nascimento dos Anjos RA: 25892704
 
 package controller;
 
@@ -25,20 +26,17 @@ import java.util.Set;
 
 public class HistoricoDespHandler implements HttpHandler {
 
-    // ORIGENS PERMITIDAS
-
+    // Define quais endereços podem realizar requisições para esta rota
     private static final Set<String> ORIGENS = Set.of(
         "http://localhost:5500",
         "http://127.0.0.1:5500"
     );
 
-    // SERVIÇOS
-
+    // Serviços utilizados para consultar o histórico e validar a sessão
     private final HistoricoDespService historicoService;
     private final SessaoService sessaoService;
 
-    // CONSTRUTOR
-
+    // Inicializa os serviços e as coleções necessárias do banco
     public HistoricoDespHandler(MongoDatabase banco) {
 
         historicoService = new HistoricoDespService(banco);
@@ -49,8 +47,7 @@ public class HistoricoDespHandler implements HttpHandler {
         );
     }
 
-    // ATENDER REQUISIÇÕES
-
+    // Recebe as requisições e verifica se podem acessar o histórico de saídas
     @Override
     public void handle(HttpExchange requisicao)
             throws IOException {
@@ -59,8 +56,7 @@ public class HistoricoDespHandler implements HttpHandler {
             .getRequestHeaders()
             .getFirst("Origin");
 
-        // VALIDAR ORIGEM
-
+        // Bloqueia requisições que vierem de origens não autorizadas
         if (
             origem != null &&
             !ORIGENS.contains(origem)
@@ -75,8 +71,7 @@ public class HistoricoDespHandler implements HttpHandler {
             return;
         }
 
-        // CONFIGURAR CORS
-
+        // Configura os cabeçalhos CORS para permitir a comunicação com o frontend
         if (origem != null) {
 
             requisicao.getResponseHeaders().set(
@@ -111,8 +106,7 @@ public class HistoricoDespHandler implements HttpHandler {
             .getRequestURI()
             .getPath();
 
-        // VALIDAR ROTA
-
+        // Confere se a requisição está sendo feita para a rota correta
         if (!"/api/saidas".equals(caminho)) {
 
             responder(
@@ -124,8 +118,7 @@ public class HistoricoDespHandler implements HttpHandler {
             return;
         }
 
-        // RESPONDER OPTIONS
-
+        // Responde às requisições OPTIONS utilizadas na verificação do CORS
         if ("OPTIONS".equals(metodo)) {
 
             requisicao.sendResponseHeaders(204, -1);
@@ -134,8 +127,7 @@ public class HistoricoDespHandler implements HttpHandler {
             return;
         }
 
-        // PERMITIR SOMENTE GET
-
+        // A consulta ao histórico permite apenas o método GET
         if (!"GET".equals(metodo)) {
 
             requisicao.getResponseHeaders().set(
@@ -154,11 +146,7 @@ public class HistoricoDespHandler implements HttpHandler {
 
         try {
 
-            // AUTENTICAR USUÁRIO
-
-            // O SESSAOSERVICE VALIDA O TOKEN
-            // E RECUPERA A CONTA NA COLEÇÃO USERS
-
+            // Verifica o token da sessão e recupera os dados do usuário logado
             Document usuario =
                 sessaoService.autenticar(requisicao);
 
@@ -176,27 +164,22 @@ public class HistoricoDespHandler implements HttpHandler {
                 return;
             }
 
-            // RECUPERAR ID DA CONTA LOGADA
-
+            // Utiliza o ID da conta para consultar somente seus registros
             ObjectId usuarioId =
                 usuario.getObjectId("_id");
-
-            // LOG DE CONFERÊNCIA
 
             System.out.println(
                 "HISTÓRICO DE SAÍDA - Usuário: " +
                 usuarioId.toHexString()
             );
 
-            // LER PARÂMETROS DA URL
-
+            // Recupera os filtros enviados pela URL
             Map<String, String> parametros =
                 lerParametros(
                     requisicao.getRequestURI().getRawQuery()
                 );
 
-            // FILTROS DE DATA
-
+            // Converte as datas informadas para aplicar o filtro por período
             LocalDate inicio = lerData(
                 parametros.get("dataInicio")
             );
@@ -205,8 +188,7 @@ public class HistoricoDespHandler implements HttpHandler {
                 parametros.get("dataFim")
             );
 
-            // PAGINAÇÃO
-
+            // Define a página e a quantidade de registros exibidos por consulta
             int pagina = Integer.parseInt(
                 parametros.getOrDefault("pagina", "1")
             );
@@ -215,15 +197,13 @@ public class HistoricoDespHandler implements HttpHandler {
                 parametros.getOrDefault("limite", "20")
             );
 
-            // PADRÃO: MOSTRAR TODAS AS SAÍDAS
-
+            // Por padrão, o histórico apresenta todas as saídas registradas
             String somenteTexto = parametros.getOrDefault(
                 "somenteDesperdicio",
                 "false"
             );
 
-            // VALIDAR FILTRO DE DESPERDÍCIO
-
+            // Confere se o filtro de desperdício recebeu um valor válido
             if (
                 !"true".equals(somenteTexto) &&
                 !"false".equals(somenteTexto)
@@ -234,8 +214,7 @@ public class HistoricoDespHandler implements HttpHandler {
                 );
             }
 
-            // CONSULTAR SERVICE
-
+            // Envia os filtros ao serviço responsável pela consulta no banco
             Document resultado =
                 historicoService.consultarHistorico(
                     inicio,
@@ -247,8 +226,7 @@ public class HistoricoDespHandler implements HttpHandler {
                     usuarioId
                 );
 
-            // RETORNAR JSON
-
+            // Retorna os registros encontrados em formato JSON
             responderJSON(
                 requisicao,
                 200,
@@ -257,6 +235,7 @@ public class HistoricoDespHandler implements HttpHandler {
 
         } catch (IllegalArgumentException erro) {
 
+            // Retorna erro quando algum parâmetro informado é inválido
             responder(
                 requisicao,
                 400,
@@ -265,6 +244,7 @@ public class HistoricoDespHandler implements HttpHandler {
 
         } catch (MongoException erro) {
 
+            // Trata possíveis falhas de comunicação com o MongoDB
             System.err.println(
                 "Erro MongoDB no histórico: " +
                 erro.getMessage()
@@ -278,6 +258,7 @@ public class HistoricoDespHandler implements HttpHandler {
 
         } catch (RuntimeException erro) {
 
+            // Trata erros inesperados durante a consulta
             System.err.println(
                 "Erro no histórico: " +
                 erro.getMessage()
@@ -291,8 +272,7 @@ public class HistoricoDespHandler implements HttpHandler {
         }
     }
 
-    // LER PARÂMETROS DA URL
-
+    // Separa os parâmetros da URL e impede que um mesmo parâmetro seja enviado duas vezes
     private static Map<String, String> lerParametros(
         String query
     ) {
@@ -325,8 +305,6 @@ public class HistoricoDespHandler implements HttpHandler {
                 StandardCharsets.UTF_8
             );
 
-            // NÃO PERMITIR PARÂMETROS DUPLICADOS
-
             if (
                 parametros.putIfAbsent(nome, valor) != null
             ) {
@@ -340,8 +318,7 @@ public class HistoricoDespHandler implements HttpHandler {
         return parametros;
     }
 
-    // LER DATA
-
+    // Converte a data recebida e verifica se está no formato esperado
     private static LocalDate lerData(String valor) {
 
         if (valor == null) {
@@ -360,8 +337,7 @@ public class HistoricoDespHandler implements HttpHandler {
         }
     }
 
-    // RESPONDER COM MENSAGEM
-
+    // Monta uma resposta de erro ou aviso com a mensagem informada
     private static void responder(
         HttpExchange requisicao,
         int status,
@@ -375,8 +351,7 @@ public class HistoricoDespHandler implements HttpHandler {
         );
     }
 
-    // RESPONDER JSON
-
+    // Envia a resposta em JSON com o status HTTP correspondente
     private static void responderJSON(
         HttpExchange requisicao,
         int status,

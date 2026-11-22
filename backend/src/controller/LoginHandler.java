@@ -1,3 +1,5 @@
+// Código feito por Miriã Nascimento dos Anjos RA: 25892704
+
 package controller;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -16,24 +18,31 @@ public class LoginHandler implements HttpHandler {
     private final LoginService loginService;
     private final SessaoService sessaoService;
 
+    // Define os endereços autorizados a realizar requisições
     private static final Set<String> ORIGENS = Set.of(
             "http://localhost:5500",
             "http://127.0.0.1:5500"
     );
 
+    // Inicializa os serviços responsáveis pelo login e pelas sessões
     public LoginHandler(MongoCollection<Document> usuarios, MongoCollection<Document> sessoes) {
         this.loginService = new LoginService(usuarios, sessoes);
         this.sessaoService = new SessaoService(usuarios, sessoes);
     }
 
+    // Recebe as requisições e direciona cada uma para sua funcionalidade
     @Override
     public void handle(HttpExchange req) throws IOException {
         req.getResponseHeaders().set("Cache-Control", "no-store");
         String origem = req.getRequestHeaders().getFirst("Origin");
+
+        // Verifica a origem da requisição antes de permitir o acesso
         if (origem != null && !ORIGENS.contains(origem)) {
             responder(req, 403, "Origem não permitida.");
             return;
         }
+
+        // Configura a comunicação entre o frontend e o backend
         if (origem != null) {
             req.getResponseHeaders().set("Access-Control-Allow-Origin", origem);
             req.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -43,15 +52,21 @@ public class LoginHandler implements HttpHandler {
 
         String caminho = req.getRequestURI().getPath();
         String metodo = req.getRequestMethod();
+
+        // Confere se a rota solicitada existe
         if (!Set.of("/api/login", "/api/logout", "/api/usuario").contains(caminho)) {
             responder(req, 404, "Rota não encontrada.");
             return;
         }
+
+        // Responde às requisições OPTIONS utilizadas na verificação do CORS
         if ("OPTIONS".equals(metodo)) {
             req.sendResponseHeaders(204, -1);
             req.close();
             return;
         }
+
+        // Verifica se o método HTTP é permitido para a rota solicitada
         if ((caminho.equals("/api/usuario") && !metodo.equals("GET"))
                 || (!caminho.equals("/api/usuario") && !metodo.equals("POST"))) {
             req.getResponseHeaders().set("Allow", caminho.equals("/api/usuario") ? "GET, OPTIONS" : "POST, OPTIONS");
@@ -59,6 +74,7 @@ public class LoginHandler implements HttpHandler {
             return;
         }
 
+        // Encaminha a requisição para login, logout ou consulta do usuário
         try {
             switch (caminho) {
                 case "/api/login" -> fazerLogin(req);
@@ -72,13 +88,17 @@ public class LoginHandler implements HttpHandler {
         }
     }
 
+    // Recebe os dados do formulário e realiza a autenticação do usuário
     private void fazerLogin(HttpExchange req) throws IOException {
+
+        // Limita o tamanho dos dados recebidos na requisição
         byte[] conteudo = req.getRequestBody().readNBytes(8193);
         if (conteudo.length > 8192) {
             responder(req, 413, "Requisição muito grande.");
             return;
         }
 
+        // Converte os dados recebidos para um documento JSON
         Document corpo;
         try {
             corpo = Document.parse(new String(conteudo, StandardCharsets.UTF_8));
@@ -87,6 +107,7 @@ public class LoginHandler implements HttpHandler {
             return;
         }
 
+        // Verifica se o e-mail e a senha foram enviados como texto
         Object valorEmail = corpo.get("email");
         Object valorSenha = corpo.get("senha");
         if (!(valorEmail instanceof String) || !(valorSenha instanceof String)) {
@@ -94,6 +115,7 @@ public class LoginHandler implements HttpHandler {
             return;
         }
 
+        // Valida os dados antes de consultar o serviço de login
         String email = ((String) valorEmail).strip();
         String senha = (String) valorSenha;
         if (email.isBlank() || email.length() > 150 || !email.contains("@")
@@ -102,6 +124,7 @@ public class LoginHandler implements HttpHandler {
             return;
         }
 
+        // Confere as credenciais e retorna os dados da sessão quando o login é válido
         Document resultado = loginService.entrar(email, senha);
         if (resultado == null) {
             responder(req, 401, "E-mail ou senha incorretos.");
@@ -110,33 +133,40 @@ public class LoginHandler implements HttpHandler {
         responderJSON(req, 200, resultado);
     }
 
+    // Encerra a sessão do usuário autenticado
     private void fazerLogout(HttpExchange req) throws IOException {
         Document usuario = sessaoService.autenticar(req);
         if (usuario == null) {
             responder(req, 401, "Não autenticado.");
             return;
         }
+
         loginService.sair(SessaoService.extrairToken(req));
         responder(req, 200, "Sessão encerrada.");
     }
 
+    // Consulta os dados públicos do usuário que está logado
     private void consultarUsuario(HttpExchange req) throws IOException {
         Document usuario = sessaoService.autenticar(req);
         if (usuario == null) {
             responder(req, 401, "Não autenticado.");
             return;
         }
+
         responderJSON(req, 200, LoginService.dadosPublicos(usuario));
     }
 
+    // Prepara uma mensagem de resposta no formato JSON
     private static void responder(HttpExchange req, int status, String mensagem) throws IOException {
         responderJSON(req, status, new Document("mensagem", mensagem));
     }
 
+    // Envia os dados em JSON com o código de resposta HTTP correspondente
     private static void responderJSON(HttpExchange req, int status, Document dados) throws IOException {
         byte[] bytes = dados.toJson().getBytes(StandardCharsets.UTF_8);
         req.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
         req.sendResponseHeaders(status, bytes.length);
+
         try (OutputStream saida = req.getResponseBody()) {
             saida.write(bytes);
         }
