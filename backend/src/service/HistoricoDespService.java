@@ -1,3 +1,4 @@
+// Código feito por Miriã Nascimento dos Anjos RA: 25892704
 
 package service;
 
@@ -25,13 +26,13 @@ import java.util.Set;
 
 public class HistoricoDespService {
 
-    // CONFIGURAÇÕES
 
+    // Define o fuso usado nos filtros de data
     private static final ZoneId FUSO =
         ZoneId.of("America/Sao_Paulo");
 
-    // MOTIVOS PERMITIDOS
 
+    // Motivos aceitos ao filtrar o histórico
     private static final Set<String> MOTIVOS = Set.of(
         "Consumido",
         "Vencimento",
@@ -40,15 +41,15 @@ public class HistoricoDespService {
         "Outro"
     );
 
-    // COLEÇÕES DO MONGODB
 
+    // Coleções utilizadas para reunir movimentações, lotes, produtos e usuários
     private final MongoCollection<Document> movimentacoes;
     private final MongoCollection<Document> lotes;
     private final MongoCollection<Document> itens;
     private final MongoCollection<Document> usuarios;
 
-    // CONSTRUTOR
 
+    // Inicializa as coleções necessárias para consultar o histórico
     public HistoricoDespService(MongoDatabase banco) {
 
         movimentacoes =
@@ -64,8 +65,8 @@ public class HistoricoDespService {
             banco.getCollection("users");
     }
 
-    // CONSULTAR HISTÓRICO DE SAÍDA
 
+    // Consulta as saídas da conta com os filtros e a paginação informados
     public Document consultarHistorico(
         LocalDate inicio,
         LocalDate fim,
@@ -76,8 +77,8 @@ public class HistoricoDespService {
         ObjectId usuarioId
     ) {
 
-        // VALIDAR USUÁRIO
 
+        // Impede consultas sem um usuário identificado
         if (usuarioId == null) {
 
             throw new IllegalArgumentException(
@@ -85,7 +86,6 @@ public class HistoricoDespService {
             );
         }
 
-        // VALIDAR PAGINAÇÃO
 
         if (
             pagina < 1 ||
@@ -98,7 +98,6 @@ public class HistoricoDespService {
             );
         }
 
-        // VALIDAR PERÍODO
 
         if (
             inicio != null &&
@@ -111,7 +110,6 @@ public class HistoricoDespService {
             );
         }
 
-        // VALIDAR MOTIVO
 
         if (
             motivo != null &&
@@ -123,8 +121,8 @@ public class HistoricoDespService {
             );
         }
 
-        // CALCULAR PAGINAÇÃO
 
+        // Calcula quantos registros devem ser ignorados nas páginas anteriores
         long deslocamento =
             ((long) pagina - 1L) * limite;
 
@@ -135,17 +133,14 @@ public class HistoricoDespService {
             );
         }
 
-        // FILTROS INICIAIS
 
+        // Monta os filtros para incluir apenas saídas, nunca entradas de estoque
         List<Bson> filtros = new ArrayList<>();
 
-        // FILTRAR SOMENTE MOVIMENTAÇÕES DE SAÍDA
-        // NÃO INCLUIR ENTRADAS DE ESTOQUE
 
+        // Mantém a opção de mostrar somente vencimentos e ajustes de saída
         if (somenteDesperdicio) {
 
-            // COMPATIBILIDADE COM CONSULTAS ANTIGAS
-            // APENAS MOVIMENTAÇÕES DE DESPERDÍCIO
 
             filtros.add(
                 Filters.in(
@@ -157,8 +152,6 @@ public class HistoricoDespService {
 
         } else {
 
-            // HISTÓRICO COMPLETO DE SAÍDAS
-            // CONSUMO, VENCIMENTO E AJUSTES DE SAÍDA
 
             filtros.add(
                 Filters.in(
@@ -170,8 +163,8 @@ public class HistoricoDespService {
             );
         }
 
-        // FILTRO POR DATA INICIAL
 
+        // Aplica o início do período, considerando o horário de São Paulo
         if (inicio != null) {
 
             filtros.add(
@@ -185,8 +178,8 @@ public class HistoricoDespService {
             );
         }
 
-        // FILTRO POR DATA FINAL
 
+        // Inclui todos os registros até o final do dia informado
         if (fim != null) {
 
             try {
@@ -213,8 +206,8 @@ public class HistoricoDespService {
             }
         }
 
-        // FILTRO POR MOTIVO
 
+        // Filtra pelo motivo quando ele é informado
         if (motivo != null) {
 
             filtros.add(
@@ -225,11 +218,10 @@ public class HistoricoDespService {
             );
         }
 
-        // PIPELINE DO MONGODB
 
+        // Monta a consulta do MongoDB juntando movimentações, lotes e produtos
         List<Bson> consulta = new ArrayList<>();
 
-        // APLICAR FILTROS DE SAÍDA, DATA E MOTIVO
 
         consulta.add(
             Aggregates.match(
@@ -237,9 +229,7 @@ public class HistoricoDespService {
             )
         );
 
-        // VINCULAR MOVIMENTAÇÃO AO LOTE
 
-        // movimentacoes.loteId -> lotes._id
 
         consulta.add(
             Aggregates.lookup(
@@ -250,13 +240,11 @@ public class HistoricoDespService {
             )
         );
 
-        // DESCARTAR MOVIMENTAÇÕES SEM LOTE
 
         consulta.add(
             Aggregates.unwind("$lote")
         );
 
-        // VERIFICAR PROPRIEDADE DO LOTE
 
         consulta.add(
             Aggregates.match(
@@ -267,9 +255,7 @@ public class HistoricoDespService {
             )
         );
 
-        // VINCULAR LOTE AO PRODUTO
 
-        // lotes.itemId -> itens._id
 
         consulta.add(
             Aggregates.lookup(
@@ -280,13 +266,11 @@ public class HistoricoDespService {
             )
         );
 
-        // DESCARTAR MOVIMENTAÇÕES SEM PRODUTO
 
         consulta.add(
             Aggregates.unwind("$produto")
         );
 
-        // VERIFICAR PROPRIEDADE DO PRODUTO
 
         consulta.add(
             Aggregates.match(
@@ -297,8 +281,8 @@ public class HistoricoDespService {
             )
         );
 
-        // CONTAR REGISTROS DA CONTA AUTENTICADA
 
+        // Conta os resultados antes de aplicar a paginação
         List<Bson> consultaTotal =
             new ArrayList<>(consulta);
 
@@ -317,12 +301,11 @@ public class HistoricoDespService {
                 Number.class
             ).longValue();
 
-        // CONSULTAR REGISTROS PAGINADOS
 
+        // Ordena os registros mais recentes e seleciona apenas a página solicitada
         List<Bson> consultaPagina =
             new ArrayList<>(consulta);
 
-        // ORDENAR DO MAIS RECENTE PARA O MAIS ANTIGO
 
         consultaPagina.add(
             Aggregates.sort(
@@ -334,7 +317,6 @@ public class HistoricoDespService {
             )
         );
 
-        // PULAR REGISTROS DAS PÁGINAS ANTERIORES
 
         consultaPagina.add(
             Aggregates.skip(
@@ -342,20 +324,18 @@ public class HistoricoDespService {
             )
         );
 
-        // LIMITAR RESULTADOS DA PÁGINA
 
         consultaPagina.add(
             Aggregates.limit(limite)
         );
 
-        // EXECUTAR CONSULTA
 
         List<Document> resultados =
             movimentacoes.aggregate(consultaPagina)
                 .into(new ArrayList<>());
 
-        // BUSCAR NOME DA CONTA
 
+        // Recupera o nome da conta para registros antigos sem responsável identificado
         Document conta = usuarios.find(
             Filters.eq("_id", usuarioId)
         ).first();
@@ -372,8 +352,8 @@ public class HistoricoDespService {
             nomeConta = "Não informado";
         }
 
-        // MONTAR RESULTADOS
 
+        // Prepara os dados de cada movimentação para exibição no frontend
         List<Document> registros = new ArrayList<>();
 
         for (Document movimentacao : resultados) {
@@ -388,8 +368,8 @@ public class HistoricoDespService {
                 Document.class
             );
 
-            // VERIFICAÇÃO ADICIONAL DE SEGURANÇA
 
+            // Confere os vínculos com a conta antes de montar o registro
             if (
                 lote == null ||
                 produto == null ||
@@ -406,24 +386,21 @@ public class HistoricoDespService {
                 );
             }
 
-            // TIPO DA MOVIMENTAÇÃO
 
             String tipo =
                 movimentacao.getString("tipo");
 
-            // IDENTIFICAR SE É DESPERDÍCIO
 
+            // Diferencia desperdícios das saídas por consumo
             boolean desperdicio =
                 "VENCIMENTO".equals(tipo) ||
                 "AJUSTE_SAIDA".equals(tipo);
 
-            // IDENTIFICAR MOTIVO
 
+            // Preenche motivos ausentes em registros mais antigos
             String motivoRegistro =
                 movimentacao.getString("motivo");
 
-            // COMPATIBILIDADE COM REGISTROS
-            // QUE NÃO POSSUEM MOTIVO PREENCHIDO
 
             if (
                 motivoRegistro == null ||
@@ -444,8 +421,8 @@ public class HistoricoDespService {
                 }
             }
 
-            // RESPONSÁVEL PELO REGISTRO
 
+            // Identifica o responsável, incluindo saídas geradas automaticamente pelo sistema
             String origem =
                 movimentacao.getString("origem");
 
@@ -453,13 +430,11 @@ public class HistoricoDespService {
 
             if ("AUTOMATICA".equals(origem)) {
 
-                // REGISTRO GERADO PELO SISTEMA
 
                 responsavel = "Sistema";
 
             } else {
 
-                // BUSCAR RESPONSÁVEL DA MOVIMENTAÇÃO
 
                 Object idResponsavel =
                     movimentacao.get("usuarioId");
@@ -482,13 +457,11 @@ public class HistoricoDespService {
 
                 } else {
 
-                    // COMPATIBILIDADE COM REGISTROS ANTIGOS
 
                     responsavel = nomeConta;
                 }
             }
 
-            // IDENTIFICADORES
 
             Object loteId =
                 movimentacao.get("loteId");
@@ -496,15 +469,14 @@ public class HistoricoDespService {
             Object produtoId =
                 lote.get("itemId");
 
-            // DATA DA MOVIMENTAÇÃO
 
             Date dataOcorrencia =
                 movimentacao.getDate(
                     "dataMovimentacao"
                 );
 
-            // CRIAR REGISTRO PARA O FRONTEND
 
+            // Reúne as informações que serão enviadas à tela de histórico
             Document registro = new Document()
                 .append(
                     "id",
@@ -586,8 +558,8 @@ public class HistoricoDespService {
             registros.add(registro);
         }
 
-        // LOG DE CONFERÊNCIA
 
+        // Registra a quantidade encontrada para conferência no servidor
         System.out.println(
             "HISTÓRICO DE SAÍDA - Usuário: " +
             usuarioId.toHexString() +
@@ -595,8 +567,8 @@ public class HistoricoDespService {
             total
         );
 
-        // RESPOSTA PARA O FRONTEND
 
+        // Retorna os registros e os dados da paginação
         return new Document()
             .append(
                 "itens",
@@ -616,13 +588,12 @@ public class HistoricoDespService {
             );
     }
 
-    // BUSCAR RESPONSÁVEL
 
+    // Localiza o responsável tanto por ObjectId quanto por um ID salvo como texto
     private Document buscarUsuarioPorId(
         Object identificador
     ) {
 
-        // IDENTIFICADOR OBJECTID
 
         if (identificador instanceof ObjectId) {
 
@@ -634,7 +605,6 @@ public class HistoricoDespService {
             ).first();
         }
 
-        // IDENTIFICADOR STRING
 
         if (
             identificador instanceof String &&
@@ -654,8 +624,8 @@ public class HistoricoDespService {
         return null;
     }
 
-    // CONVERTER IDENTIFICADOR
 
+    // Converte o identificador para texto quando necessário
     private static String converterId(Object valor) {
 
         if (valor == null) {
@@ -671,8 +641,8 @@ public class HistoricoDespService {
         return valor.toString();
     }
 
-    // CONVERTER QUANTIDADE
 
+    // Converte quantidades decimais sem perder sua representação original
     private static String decimalTexto(Object valor) {
 
         if (valor == null) {
@@ -699,8 +669,8 @@ public class HistoricoDespService {
         return valor.toString();
     }
 
-    // CONVERTER DATA
 
+    // Formata as datas para o retorno em JSON
     private static String converterData(Date data) {
 
         return data == null
@@ -708,8 +678,8 @@ public class HistoricoDespService {
             : data.toInstant().toString();
     }
 
-    // CONVERTER NÚMERO
 
+    // Prepara os valores numéricos do desperdício para a resposta
     private static Object converterNumero(Object valor) {
 
         if (valor instanceof Decimal128) {

@@ -1,4 +1,6 @@
 
+<!-- Código feito por Miriã Nascimento dos Anjos RA: 25892704 -->
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -8,8 +10,11 @@
 
   <title>Login | PsicomManager</title>
 
+  <!-- Estilização da página -->
   <link rel="stylesheet" href="../../public/css/style.css">
+
   <style>
+    /* Fundo e estrutura da página de login */
     .login-page {
       min-height: 100vh;
       margin: 0;
@@ -31,6 +36,7 @@
       box-sizing: border-box;
     }
 
+    /* Estilo do formulário de login */
     .login-container > section {
       width: 100%;
       max-width: 420px;
@@ -48,6 +54,7 @@
       box-sizing: border-box;
     }
 
+    /* Estilização dos campos de entrada */
     .login-card input {
       display: block;
       width: 100%;
@@ -70,6 +77,7 @@
       color: #9CA3AF;
     }
 
+    /* Ajustes para telas menores */
     @media (max-width: 480px) {
       .login-container {
         padding: 16px;
@@ -84,10 +92,12 @@
 
 <body class="login-page">
 
+  <!-- Conteúdo principal -->
   <main class="login-container">
 
     <section class="w-full max-w-[520px]">
 
+      <!-- Formulário de login -->
       <form
         id="formLogin"
         class="login-card"
@@ -101,7 +111,7 @@
           </h1>
         </div>
 
-        <!-- E-mail -->
+        <!-- Campo de e-mail -->
         <div class="mb-5">
 
           <label
@@ -151,7 +161,7 @@
 
         </div>
 
-        <!-- Senha -->
+        <!-- Campo de senha -->
         <div class="mb-2">
 
           <label
@@ -191,6 +201,7 @@
               "
             >
 
+            <!-- Botão para mostrar ou ocultar a senha -->
             <button
               id="btnMostrarSenha"
               type="button"
@@ -243,7 +254,7 @@
 
         </div>
 
-        <!-- Esqueceu a senha -->
+        <!-- Link para recuperação de senha -->
         <div class="mb-6 text-right">
 
           <a
@@ -260,7 +271,7 @@
 
         </div>
 
-        <!-- Botão Entrar -->
+        <!-- Botão para entrar -->
         <button
           type="submit"
           class="
@@ -281,7 +292,7 @@
           Entrar
         </button>
 
-        <!-- Criar conta -->
+        <!-- Link para criar uma conta -->
         <p class="mt-3 text-center">
 
           <a
@@ -304,7 +315,8 @@
 
   </main>
 
+  <!-- Script responsável pelo login -->
   <script src="../../public/js/login-de-usuario.js"></script>
 
 </body>
-  </html>
+</html>

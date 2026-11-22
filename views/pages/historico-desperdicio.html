@@ -1,4 +1,6 @@
 
+<!-- Código feito por Miriã Nascimento dos Anjos RA: 25892704 -->
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -10,15 +12,14 @@
 
     <title>Histórico de Saída | Gestão de Desperdício</title>
 
-    <!-- ESTILIZAÇÃO -->
+    <!-- Estilização da página -->
     <link
         rel="stylesheet"
         href="../../public/css/style.css"
     >
 
     <style>
-        /* FILTROS DE MOTIVO */
-
+        /* Filtros de motivo */
         .filtros-motivo {
             display: flex;
             flex-wrap: wrap;
@@ -64,8 +65,7 @@
             background-color: #144b50;
         }
 
-        /* BARRA DE PESQUISA */
-
+        /* Barra de pesquisa */
         .barra-pesquisa {
             display: flex;
             align-items: center;
@@ -107,8 +107,7 @@
             color: #6b7280;
         }
 
-        /* TABELA */
-
+        /* Tabela do histórico */
         .tabela-historico {
             width: 100%;
             min-width: 1050px;
@@ -129,8 +128,7 @@
             font-weight: 500;
         }
 
-        /* BOTÃO DE DESCRIÇÃO */
-
+        /* Botão de descrição */
         .botao-descricao {
             padding: 6px 12px;
 
@@ -150,16 +148,14 @@
             background-color: #d8e7e8;
         }
 
-        /* TEXTO DA DESCRIÇÃO */
-
+        /* Texto da descrição */
         .texto-descricao {
             white-space: pre-wrap;
             overflow-wrap: anywhere;
             line-height: 1.6;
         }
 
-        /* RESPONSIVIDADE */
-
+        /* Ajustes para telas menores */
         @media (max-width: 640px) {
 
             .filtros-motivo {
@@ -181,23 +177,23 @@
 
 <body class="flex min-h-screen flex-col bg-background md:flex-row">
 
-    <!-- MENU LATERAL -->
+    <!-- Menu lateral -->
     <aside
         id="aside-placeholder"
         class="w-full shrink-0 md:w-[180px]">
     </aside>
 
-    <!-- CONTEÚDO PRINCIPAL -->
+    <!-- Conteúdo principal -->
     <div class="flex min-w-0 flex-1 flex-col">
 
-        <!-- CABEÇALHO -->
+        <!-- Cabeçalho -->
         <div id="header-placeholder"></div>
 
         <main class="flex-1">
 
             <div class="w-full px-3 py-4 sm:px-6 sm:py-8">
 
-                <!-- CAMINHO DA PÁGINA -->
+                <!-- Caminho da página -->
                 <div class="mb-8 flex min-h-[35px] items-center text-base">
 
                     <span class="text-text-secondary">
@@ -209,11 +205,10 @@
                     </span>
                 </div>
 
-                <!-- CARD DO HISTÓRICO -->
+                <!-- Área do histórico -->
                 <section
                     class="w-full rounded-md bg-white px-6 py-5">
 
-                    <!-- TÍTULO -->
                     <div class="mb-8 flex items-center justify-between">
 
                         <h1 class="text-base font-semibold text-text">
@@ -221,10 +216,9 @@
                         </h1>
                     </div>
 
-                    <!-- FILTROS POR MOTIVO -->
+                    <!-- Botões para filtrar pelo motivo da saída -->
                     <div class="filtros-motivo">
 
-                        <!-- TODOS -->
                         <button
                             type="button"
                             data-motivo="Todos"
@@ -234,7 +228,6 @@
                             Todos
                         </button>
 
-                        <!-- CONSUMIDO -->
                         <button
                             type="button"
                             data-motivo="Consumido"
@@ -244,7 +237,6 @@
                             Consumido
                         </button>
 
-                        <!-- VENCIMENTO -->
                         <button
                             type="button"
                             data-motivo="Vencimento"
@@ -254,7 +246,6 @@
                             Vencimento
                         </button>
 
-                        <!-- CONTAMINADO -->
                         <button
                             type="button"
                             data-motivo="Contaminado"
@@ -264,7 +255,6 @@
                             Contaminado
                         </button>
 
-                        <!-- DANIFICADO -->
                         <button
                             type="button"
                             data-motivo="Danificado"
@@ -274,7 +264,6 @@
                             Danificado
                         </button>
 
-                        <!-- OUTRO -->
                         <button
                             type="button"
                             data-motivo="Outro"
@@ -286,12 +275,11 @@
 
                     </div>
 
-                    <!-- BARRA DE PESQUISA -->
+                    <!-- Pesquisa pelo nome do produto -->
                     <div class="mb-8 flex w-full items-center">
 
                         <div class="barra-pesquisa">
 
-                            <!-- ÍCONE DE PESQUISA -->
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
@@ -309,7 +297,6 @@
                                 <path d="m20 20-4-4"></path>
                             </svg>
 
-                            <!-- CAMPO DE PESQUISA -->
                             <input
                                 type="search"
                                 id="pesquisaProduto"
@@ -320,12 +307,11 @@
                         </div>
                     </div>
 
-                    <!-- TABELA DO HISTÓRICO -->
+                    <!-- Tabela com os registros de saída -->
                     <div class="w-full overflow-x-auto">
 
                         <table class="tabela-historico text-text">
 
-                            <!-- CABEÇALHO DA TABELA -->
                             <thead>
 
                                 <tr class="border-b border-gray-400 text-text-secondary">
@@ -357,7 +343,7 @@
                                 </tr>
                             </thead>
 
-                            <!-- REGISTROS DO MONGODB -->
+                            <!-- Registros carregados do banco de dados -->
                             <tbody id="historico-desperdicio">
 
                                 <tr>
@@ -373,7 +359,7 @@
                         </table>
                     </div>
 
-                    <!-- MENSAGENS DE ERRO -->
+                    <!-- Mensagens de erro -->
                     <p
                         id="mensagemErroHistorico"
                         class="mt-4 hidden text-xs text-red-600"
@@ -385,11 +371,11 @@
             </div>
         </main>
 
-        <!-- RODAPÉ -->
+        <!-- Rodapé -->
         <div id="footer-placeholder"></div>
     </div>
 
-    <!-- MODAL DE DESCRIÇÃO -->
+    <!-- Modal para visualizar a descrição de uma saída -->
     <div
         id="modalDescricao"
         class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4"
@@ -398,11 +384,10 @@
         aria-labelledby="tituloModalDescricao"
         aria-describedby="textoModalDescricao">
 
-        <!-- CARD -->
         <section
             class="w-full max-w-[480px] max-h-[90vh] overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
 
-            <!-- CABEÇALHO DO MODAL -->
+            <!-- Título e botão para fechar -->
             <div class="mb-5 flex items-center justify-between gap-4">
 
                 <h2
@@ -412,7 +397,6 @@
                     Descrição da saída
                 </h2>
 
-                <!-- BOTÃO X -->
                 <button
                     id="fecharModalDescricaoX"
                     type="button"
@@ -423,7 +407,7 @@
                 </button>
             </div>
 
-            <!-- DESCRIÇÃO REGISTRADA -->
+            <!-- Descrição registrada -->
             <div class="rounded-md bg-[#e9ebee] px-4 py-4">
 
                 <p
@@ -435,7 +419,7 @@
 
             </div>
 
-            <!-- BOTÃO FECHAR -->
+            <!-- Botão para fechar o modal -->
             <div class="mt-6 flex justify-end">
 
                 <button
@@ -450,10 +434,9 @@
         </section>
     </div>
 
-    <!-- COMPONENTES COMPARTILHADOS -->
+    <!-- Scripts da página -->
     <script src="../../public/js/load-partials.js"></script>
 
-    <!-- HISTÓRICO DE SAÍDA -->
     <script src="../../public/js/historico-desperdicio.js"></script>
 
 </body>
