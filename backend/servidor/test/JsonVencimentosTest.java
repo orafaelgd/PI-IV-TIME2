@@ -1,3 +1,6 @@
+// Author: Rafael Gaudencio Dias
+// Ra: 25018953
+
 package test;
 
 import helper.JsonVencimentos;
@@ -13,8 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Confere o formato das respostas montadas por JsonVencimentos, sem iniciar o
+ * servidor nem acessar o banco. As datas fixas tornam os resultados reproduzíveis
+ * independentemente do dia em que os testes forem executados.
+ */
 public class JsonVencimentosTest {
 
+    // Mesmo sem lotes, a resposta deve informar o período consultado e o total zero.
     @Test
     void deveGerarJsonComListaVazia() {
 
@@ -25,13 +34,15 @@ public class JsonVencimentosTest {
         String resultado = JsonVencimentos.gerar(lotes, hoje, 7);
 
         String esperado = "{\"dataInicio\":\"2026-11-19\","
-                + "\"dataFim\":\"2026-11-25\","
+                + "\"dataFim\":\"2026-11-26\","
                 + "\"total\":0,"
                 + "\"lotes\":[]}";
 
+        // A comparação completa também confere nomes de campos, aspas e separadores.
         assertEquals(esperado, resultado);
     }
 
+    // Usa um lote conhecido para conferir todos os campos e a quantidade como texto decimal.
     @Test
     void deveGerarJsonComUmLote() {
 
@@ -50,7 +61,7 @@ public class JsonVencimentosTest {
                 List.of(lote), hoje, 7);
 
         String esperado = "{\"dataInicio\":\"2026-11-19\","
-                + "\"dataFim\":\"2026-11-25\","
+                + "\"dataFim\":\"2026-11-26\","
                 + "\"total\":1,"
                 + "\"lotes\":[{"
                 + "\"loteId\":\"123\","
@@ -65,6 +76,7 @@ public class JsonVencimentosTest {
         assertEquals(esperado, resultado);
     }
 
+    // Aspas, barra invertida e quebra de linha precisam ser escapadas dentro do JSON.
     @Test
     void deveEscaparCaracteresEspeciais() {
 
@@ -84,9 +96,11 @@ public class JsonVencimentosTest {
 
         String esperado = "\"produtoNome\":\"Arroz \\\"Integral\\\" \\\\ Especial\\nPremium\"";
 
+        // Aqui basta localizar o trecho do nome com os escapes esperados.
         assertTrue(resultado.contains(esperado));
     }
 
+    // Com dois lotes, verifica a contagem e a presença dos dois objetos na lista.
     @Test
     void deveGerarJsonComMultiplosLotes() {
 
@@ -119,9 +133,11 @@ public class JsonVencimentosTest {
 
         assertTrue(resultado.contains("\"produtoNome\":\"Feijão\""));
 
+        // A vírgula entre objetos deve separar os lotes dentro do array.
         assertTrue(resultado.contains("},{"));
     }
 
+    // Um código ausente deve ser escrito como null, sem aspas, na resposta.
     @Test
     void deveGerarJsonComAtributoNulo() {
 
@@ -142,6 +158,7 @@ public class JsonVencimentosTest {
         assertTrue(resultado.contains("\"codigo\":null"));
     }
 
+    // "Hoje" mantém a data atual; os demais filtros incluem o último dia solicitado.
     @Test
     void deveCalcularDataFimCorretamente() {
 
@@ -151,12 +168,13 @@ public class JsonVencimentosTest {
 
         String[] datasEsperadas = {
                 "2026-11-19",
-                "2026-11-21",
-                "2026-11-25",
-                "2026-12-03",
-                "2026-12-18"
+                "2026-11-22",
+                "2026-11-26",
+                "2026-12-04",
+                "2026-12-19"
         };
 
+        // Cada posição associa um período à sua data final esperada, incluindo virada de mês.
         for (int i = 0; i < periodos.length; i++) {
 
             String resultado = JsonVencimentos.gerar(
@@ -165,6 +183,17 @@ public class JsonVencimentosTest {
             assertTrue(resultado.contains(
                     "\"dataFim\":\"" + datasEsperadas[i] + "\""));
         }
+    }
+
+    @Test
+    void deveIncluirTrigesimoDiaNoPeriodoInformado() {
+        LocalDate hoje = LocalDate.of(2026, 11, 23);
+
+        String resultado = JsonVencimentos.gerar(List.of(), hoje, 30);
+
+        assertEquals(
+                "{\"dataInicio\":\"2026-11-23\",\"dataFim\":\"2026-12-23\",\"total\":0,\"lotes\":[]}",
+                resultado);
     }
 
 }

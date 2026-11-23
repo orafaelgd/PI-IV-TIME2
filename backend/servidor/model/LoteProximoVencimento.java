@@ -1,8 +1,16 @@
+// Author: Rafael Gaudencio Dias
+// Ra: 25018953
+
 package model;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/**
+ * Reúne os dados de um lote e de seu produto para a consulta de vencimentos.
+ * O repositório monta esse objeto, que depois é usado na geração do JSON.
+ * Seus valores ficam fixos após a criação, sem métodos para alterá-los.
+ */
 public class LoteProximoVencimento {
 
   private final String loteId;
@@ -13,6 +21,8 @@ public class LoteProximoVencimento {
   private final String unidadeMedida;
   private final LocalDate dataValidade;
 
+  // Apenas guarda os valores recebidos. As regras de seleção dos lotes
+  // ficam no repositório; este modelo não valida nomes, quantidades ou datas.
   public LoteProximoVencimento(
       String loteId,
       String codigo,
@@ -31,6 +41,8 @@ public class LoteProximoVencimento {
     this.dataValidade = dataValidade;
   }
 
+  // Os getters abaixo permitem consultar cada atributo ao montar a resposta,
+  // sem expor operações que modifiquem os dados do lote.
   public String getLoteId() {
     return loteId;
   }

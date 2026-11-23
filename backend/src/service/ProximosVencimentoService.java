@@ -11,6 +11,7 @@ import org.bson.types.ObjectId;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -89,22 +90,24 @@ public class ProximosVencimentoService {
 
         // =================================================
         // DEFINIÇÃO DO INTERVALO DE DATAS
-        // Considera o dia atual como o primeiro dia
-        // e calcula os limites da consulta.
-        // O limite final é exclusivo.
+        // Inclui hoje e o vencimento exatamente daqui a N dias.
+        // O filtro Hoje (1) consulta somente o dia atual.
+        // O limite exclusivo é a meia-noite do dia seguinte.
         // =================================================
 
         LocalDate hoje = LocalDate.now(FUSO);
 
         LocalDate fimExclusivo =
-            hoje.plusDays(dias);
+            hoje.plusDays(dias == 1 ? 1 : dias + 1);
 
+        // As datas dos lotes são gravadas à meia-noite UTC.
+        // São Paulo define apenas qual é o dia atual da consulta.
         Date inicio = Date.from(
-            hoje.atStartOfDay(FUSO).toInstant()
+            hoje.atStartOfDay(ZoneOffset.UTC).toInstant()
         );
 
         Date fim = Date.from(
-            fimExclusivo.atStartOfDay(FUSO).toInstant()
+            fimExclusivo.atStartOfDay(ZoneOffset.UTC).toInstant()
         );
 
         // LISTA DE RESULTADOS
@@ -217,14 +220,14 @@ public class ProximosVencimentoService {
 
                 // =================================================
                 // FORMATAÇÃO DA DATA E DA QUANTIDADE
-                // Converte a validade para uma data legível
-                // e o saldo Decimal128 para texto, preservando
+                // Preserva o dia da validade ao ler a data em UTC.
+                // Converte o saldo Decimal128 para texto, preservando
                 // a representação decimal do valor.
                 // =================================================
 
                 String dataValidade =
                     validade.toInstant()
-                        .atZone(FUSO)
+                        .atZone(ZoneOffset.UTC)
                         .toLocalDate()
                         .toString();
 
