@@ -1,32 +1,16 @@
-
-<!-- SIDEBAR - ECOSTOCK -->
-
-<!--
-  MENU LATERAL
-  sticky: acompanha a rolagem quando necessário.
-  top-0: mantém o menu no topo.
-  h-screen: ocupa toda a altura da tela.
-  overflow-y-auto: permite rolar o próprio menu caso necessário.
+<!-- Author: Rafael Gaudencio Dias
+     Ra: 25018953 
 -->
 
-<div
-  class="sticky top-0 flex h-screen w-full flex-col
-         overflow-y-auto bg-primary-dark text-white"
->
-
-  <!-- LOGO ECOSTOCK -->
+<div class="flex w-full flex-col bg-primary-dark text-white md:min-h-screen">
   <div
-    class="relative flex h-[175px] w-full shrink-0
-           items-center justify-center overflow-hidden bg-white"
+    class="flex min-h-16 shrink-0 items-center justify-between gap-3 bg-[#e9ebee] px-4 text-gray-950 md:h-[167px] md:justify-center"
   >
-
     <img
       src="/public/images/Logo.jpeg"
       alt="Logo EcoStock"
-      class="h-full w-full object-cover object-center"
-    >
-
-    <!-- BOTÃO DO MENU MOBILE -->
+      class="h-24 w-24 object-contain sm:h-28 sm:w-28 md:h-36 md:w-36"
+    />
     <button
       type="button"
       data-mobile-menu-toggle
