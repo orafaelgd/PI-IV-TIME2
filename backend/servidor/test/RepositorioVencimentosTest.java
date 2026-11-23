@@ -22,6 +22,8 @@ import org.bson.types.ObjectId;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
@@ -340,7 +342,7 @@ public class RepositorioVencimentosTest {
     // =====================================================
     // T07 - PERÍODO DE VENCIMENTO
     // Verifica se o início é inclusivo e o fim
-    // é exclusivo, considerando a data informada.
+    // é exclusivo, incluindo o dia que completa sete dias de prazo.
     // =====================================================
 
     @Test
@@ -360,7 +362,7 @@ public class RepositorioVencimentosTest {
         );
 
         Date fim = Date.from(
-            hoje.plusDays(7)
+            hoje.plusDays(8)
                 .atStartOfDay(ZoneOffset.UTC)
                 .toInstant()
         );
@@ -403,6 +405,45 @@ public class RepositorioVencimentosTest {
 
         assertTrue(encontrouInicio);
         assertTrue(encontrouFim);
+    }
+
+    // Confere os limites enviados ao MongoDB. Em 23/11, o filtro de 30 dias
+    // inclui todo o dia 23/12 e exclui 24/12; "Hoje" continua excluindo amanhã.
+    @ParameterizedTest
+    @CsvSource({
+        "1, 2026-11-24",
+        "3, 2026-11-27",
+        "7, 2026-12-01",
+        "15, 2026-12-09",
+        "30, 2026-12-24"
+    })
+    void deveIncluirUltimoDiaDoFiltroSemAmpliarHoje(
+        int dias,
+        String fimExclusivoEsperado
+    ) {
+        LocalDate referencia = LocalDate.of(2026, 11, 23);
+
+        repositorio.buscar(dias, referencia, usuarioId);
+
+        BsonArray condicoes = capturarFiltroLotes().getArray("$and");
+
+        BsonDocument inicioEsperado = new BsonDocument(
+            "dataValidade",
+            new BsonDocument("$gte", new BsonDateTime(
+                referencia.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            ))
+        );
+
+        BsonDocument fimEsperado = new BsonDocument(
+            "dataValidade",
+            new BsonDocument("$lt", new BsonDateTime(
+                LocalDate.parse(fimExclusivoEsperado)
+                    .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            ))
+        );
+
+        assertTrue(condicoes.contains(inicioEsperado));
+        assertTrue(condicoes.contains(fimEsperado));
     }
 
     // =====================================================

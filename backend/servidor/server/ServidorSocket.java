@@ -1,3 +1,6 @@
+// Author: Rafael Gaudencio Dias
+// Ra: 25018953
+
 package server;
 
 import java.io.BufferedReader;
@@ -20,6 +23,11 @@ import service.SessaoService;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
+/**
+ * Recebe consultas de próximos vencimentos por conexões TCP e interpreta
+ * as requisições HTTP manualmente. A sessão identifica o usuário; o repositório
+ * busca seus lotes, e os helpers montam o JSON e a resposta HTTP.
+ */
 public class ServidorSocket implements Runnable {
 
   private final RepositorioVencimentos repositorio;
@@ -29,11 +37,15 @@ public class ServidorSocket implements Runnable {
 
   @Override
   public void run() {
+    // Mantém a porta aberta enquanto o servidor estiver em execução.
+    // O try-with-resources fecha o socket de escuta se esse bloco terminar.
     try (ServerSocket servidor = new ServerSocket(porta)) {
 
       System.out.println("Servidor iniciado na porta " + porta);
 
       while (true) {
+        // accept() aguarda uma conexão. Cada cliente é atendido em outra
+        // thread, permitindo que o laço continue recebendo novas conexões.
         Socket cliente = servidor.accept();
 
         Thread thread = new Thread(() -> atenderCliente(cliente));
@@ -45,6 +57,8 @@ public class ServidorSocket implements Runnable {
     }
   }
 
+  // As dependências são fornecidas pela aplicação para compartilhar o acesso
+  // aos dados e a autenticação; este servidor não cria uma conexão própria ao banco.
   public ServidorSocket(
       RepositorioVencimentos repo,
       SessaoService sessaoServ,
@@ -55,6 +69,11 @@ public class ServidorSocket implements Runnable {
     this.porta = porta;
   }
 
+  /**
+   * Processa uma requisição e encerra a conexão ao final, inclusive em caso
+   * de erro. A entrada contém o HTTP enviado pelo cliente, e RespostaHttp
+   * escreve os cabeçalhos e o corpo JSON na saída da conexão.
+   */
   private void atenderCliente(Socket cliente) {
     try (Socket conexao = cliente) {
 
@@ -63,7 +82,8 @@ public class ServidorSocket implements Runnable {
 
       OutputStream saida = conexao.getOutputStream();
 
-      // Lê a primeira linha da requisição HTTP
+      // A primeira linha informa método, recurso e versão do protocolo.
+      // Uma conexão sem essa linha não pode ser tratada como uma requisição válida.
       String primeiraLinha = entrada.readLine();
 
       if (primeiraLinha == null || primeiraLinha.isBlank()) {
@@ -74,7 +94,8 @@ public class ServidorSocket implements Runnable {
 
       System.out.println("Requisição: " + primeiraLinha);
 
-      // Lê os demais cabeçalhos HTTP
+      // Os cabeçalhos terminam em uma linha vazia. Origin é usado na resposta
+      // CORS, e Authorization fornece o token de sessão para a autenticação.
 
       String origem = null;
       String autorizacao = null;
@@ -91,7 +112,9 @@ public class ServidorSocket implements Runnable {
         }
       }
 
-      // Separa a primeira linha em partes
+      // Exemplo: "GET /api/lotes/proximos-vencimento?dias=7 HTTP/1.1".
+      // A rota é verificada sem a query, mas o recurso completo é preservado
+      // para que ParametroDias interprete o período solicitado mais adiante.
       String[] partes = primeiraLinha.split(" ");
 
       if (partes.length != 3) {
@@ -103,17 +126,17 @@ public class ServidorSocket implements Runnable {
       String metodo = partes[0];
       String recurso = partes[1];
 
-      // Remove os parâmetros da URL
       String caminho = recurso.split("\\?", 2)[0];
 
-      // Verifica a rota solicitada
+      // Este servidor atende somente a consulta de próximos vencimentos.
       if (!caminho.equals("/api/lotes/proximos-vencimento")) {
         RespostaHttp.enviar(saida, 404, "Not Found",
             "{\"erro\":\"Rota nao encontrada\"}", origem);
         return;
       }
 
-      // Responde à verificação CORS do navegador
+      // O navegador pode enviar OPTIONS antes do GET para verificar o CORS.
+      // Essa verificação é respondida antes de exigir uma sessão de usuário.
       if (metodo.equals("OPTIONS")) {
         RespostaHttp.enviar(
             saida, 200, "OK", "{}", origem);
@@ -129,6 +152,8 @@ public class ServidorSocket implements Runnable {
 
       try {
 
+        // Resolve o cabeçalho Bearer para um usuário com sessão válida.
+        // Sem autenticação, o fluxo termina antes de consultar os lotes.
         String token = SessaoService.extrairToken(autorizacao);
 
         Document usuario = sessaoService.autenticarToken(token);
@@ -144,7 +169,8 @@ public class ServidorSocket implements Runnable {
           return;
         }
 
-        // Identifica o usuário autenticado
+        // O identificador limita a busca aos dados da conta autenticada.
+        // Um documento de usuário sem esse campo não pode autorizar a consulta.
         ObjectId usuarioId = usuario.getObjectId("_id");
 
         if (usuarioId == null) {
@@ -157,6 +183,9 @@ public class ServidorSocket implements Runnable {
           return;
         }
 
+        // Usa o período validado e a data atual de São Paulo como base da busca.
+        // O repositório aplica os filtros; o serializador transforma o resultado
+        // em JSON antes de enviá-lo com status HTTP 200.
         int dias = ParametroDias.obter(recurso);
 
         LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
@@ -173,6 +202,7 @@ public class ServidorSocket implements Runnable {
 
       } catch (IllegalArgumentException erro) {
 
+        // Erros de interpretação ou validação dos argumentos retornam HTTP 400.
         RespostaHttp.enviar(
             saida,
             400,
@@ -180,6 +210,8 @@ public class ServidorSocket implements Runnable {
             "{\"erro\":\"O parametro dias deve ser 1, 3 ou 7\"}", origem);
 
       } catch (Exception erro) {
+        // Falhas inesperadas da consulta são registradas no terminal e retornam
+        // uma mensagem genérica ao cliente, sem expor detalhes internos no JSON.
         erro.printStackTrace();
 
         RespostaHttp.enviar(
@@ -190,6 +222,8 @@ public class ServidorSocket implements Runnable {
       }
 
     } catch (Exception erro) {
+      // Falhas na leitura ou escrita da conexão também ficam no terminal.
+      // O try-with-resources ainda garante o fechamento do socket do cliente.
       erro.printStackTrace();
     }
   }

@@ -298,14 +298,14 @@ public class VencimentosNormalTest {
             );
 
 
-            // Verificar período de sete dias
+            // Verificar que o período inclui o dia que completa sete dias de prazo
             assertEquals(
                 hoje.toString(),
                 json.getString("dataInicio")
             );
 
             assertEquals(
-                hoje.plusDays(6).toString(),
+                hoje.plusDays(7).toString(),
                 json.getString("dataFim")
             );
 
@@ -440,7 +440,7 @@ public class VencimentosNormalTest {
             );
 
             Date fimEsperado = Date.from(
-                hoje.plusDays(7)
+                hoje.plusDays(8)
                     .atStartOfDay(ZoneOffset.UTC)
                     .toInstant()
             );

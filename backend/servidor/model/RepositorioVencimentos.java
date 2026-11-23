@@ -1,3 +1,6 @@
+// Author: Rafael Gaudencio Dias
+// Ra: 25018953
+
 package model;
 
 import com.mongodb.client.MongoCollection;
@@ -17,11 +20,16 @@ import java.util.List;
 
 import java.time.ZoneOffset;
 
+/**
+ * Consulta no MongoDB os lotes próximos do vencimento de uma conta.
+ * Combina os dados do lote com nome e unidade de medida do produto associado.
+ */
 public class RepositorioVencimentos {
 
   private final MongoCollection<Document> lotes;
   private final MongoCollection<Document> produtos;
 
+  // Recebe as coleções já disponíveis na aplicação; não abre uma nova conexão.
   public RepositorioVencimentos(
       MongoCollection<Document> lotes,
       MongoCollection<Document> produtos) {
@@ -30,19 +38,29 @@ public class RepositorioVencimentos {
     this.produtos = produtos;
   }
 
+  /**
+   * Busca os lotes de usuarioId durante o período de dias iniciado em hoje.
+   * Devolve os registros elegíveis por ordem de validade, ou uma lista vazia.
+   */
   public List<LoteProximoVencimento> buscar(
       int dias, LocalDate hoje, ObjectId usuarioId) {
 
+    // A data de validade é tratada em UTC para preservar o dia salvo no banco.
+    // "Hoje" (dias = 1) inclui somente a data atual. Os outros filtros
+    // incluem o dia completo de hoje + dias; o corte fica na meia-noite seguinte.
     Date inicio = Date.from(
         hoje.atStartOfDay(ZoneOffset.UTC).toInstant());
 
     Date fim = Date.from(
-        hoje.plusDays(dias)
+        hoje.plusDays(dias == 1 ? 1 : dias + 1)
             .atStartOfDay(ZoneOffset.UTC)
             .toInstant());
 
     List<LoteProximoVencimento> resultado = new ArrayList<>();
 
+    // O MongoDB aplica os filtros de conta, período, saldo positivo e lote
+    // não arquivado. O cursor percorre os resultados em ordem de validade
+    // e é fechado pelo try-with-resources mesmo se ocorrer uma exceção.
     try (MongoCursor<Document> cursor = lotes.find(
         and(
             eq("usuarioId", usuarioId),
@@ -60,10 +78,13 @@ public class RepositorioVencimentos {
 
         ObjectId itemId = lote.getObjectId("itemId");
 
+        // Sem itemId não é possível localizar o produto desse lote.
         if (itemId == null) {
           continue;
         }
 
+        // A consulta do produto também exige a mesma conta. Lotes sem produto
+        // correspondente ou ligados a um produto inativo ficam fora da resposta.
         Document produto = produtos.find(and(eq("_id", itemId), eq("usuarioId", usuarioId))).first();
 
         if (produto == null ||
@@ -80,12 +101,16 @@ public class RepositorioVencimentos {
             "quantidadeDisponivel",
             Decimal128.class);
 
+        // Esses três campos são necessários para identificar o lote e converter
+        // sua validade e quantidade para o modelo retornado.
         if (loteId == null ||
             validade == null ||
             quantidade == null) {
           continue;
         }
 
+        // Converte os tipos do MongoDB para os usados na resposta: Date vira
+        // LocalDate em UTC, ObjectId vira texto e Decimal128 vira BigDecimal.
         LocalDate dataValidade = validade
             .toInstant()
             .atZone(ZoneOffset.UTC)

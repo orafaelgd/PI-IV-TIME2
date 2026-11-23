@@ -187,8 +187,8 @@ public class DashboardService {
 
         LocalDate hoje = LocalDate.now(FUSO);
 
-        // Inclui hoje e os próximos seis dias
-        LocalDate ultimoDia = hoje.plusDays(6);
+        // Inclui hoje e os vencimentos até daqui a sete dias.
+        LocalDate ultimoDia = hoje.plusDays(7);
 
         // BUSCAR PRODUTOS DO USUÁRIO
 
