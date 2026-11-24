@@ -4,6 +4,7 @@ package controller;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 import service.RecuperacaoSenhaService;
@@ -23,10 +24,15 @@ public class RecuperacaoSenhaHandler implements HttpHandler {
     private final RecuperacaoSenhaService service;
 
     // Inicializa o serviço com as coleções necessárias do banco de dados
-    public RecuperacaoSenhaHandler(MongoCollection<Document> usuarios,
+    public RecuperacaoSenhaHandler(MongoClient cliente,
+                                   MongoCollection<Document> usuarios,
                                    MongoCollection<Document> sessoes,
                                    MongoCollection<Document> recuperacoes) {
-        this.service = new RecuperacaoSenhaService(usuarios, sessoes, recuperacoes);
+        this(new RecuperacaoSenhaService(cliente, usuarios, sessoes, recuperacoes));
+    }
+
+    public RecuperacaoSenhaHandler(RecuperacaoSenhaService service) {
+        this.service = service;
     }
 
     // Recebe as requisições de solicitação e redefinição de senha

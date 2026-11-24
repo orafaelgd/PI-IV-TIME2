@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Valida o e-mail e envia a solicitação de recuperação de senha
   form.addEventListener("submit", async (evento) => {
     evento.preventDefault();
+    if (botao.disabled) return;
 
     const endereco = email.value.trim().toLowerCase();
 
@@ -49,8 +50,15 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ email: endereco })
       });
 
-      // Verifica se a solicitação foi recebida com sucesso pelo servidor
-      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      // Mantém a explicação do backend, como a indisponibilidade do envio de e-mail.
+      if (!resposta.ok) {
+        const dados = await resposta.json().catch(() => ({}));
+        erro.textContent = typeof dados.mensagem === "string" && dados.mensagem.trim()
+          ? dados.mensagem
+          : "Não foi possível enviar a solicitação. Tente novamente.";
+        erro.hidden = false;
+        return;
+      }
 
       // Informa sobre o envio do link sem revelar se o e-mail está cadastrado
       mensagem.textContent = "Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha. Verifique também a caixa de spam.";
