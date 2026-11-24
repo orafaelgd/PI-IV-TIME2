@@ -145,6 +145,7 @@ public class Main {
 
                         RecuperacaoSenhaHandler recuperacaoSenhaHandler =
                             new RecuperacaoSenhaHandler(
+                                cliente,
                                 usuarios,
                                 sessoes,
                                 recuperacoesSenha);

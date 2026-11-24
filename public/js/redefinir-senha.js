@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Impede a redefinição caso o link não possua um token válido para consulta
-  if (!token) {
+  if (!token || !/^[A-Za-z0-9_-]{40,100}$/.test(token)) {
     informarErro("Link inválido ou incompleto. Solicite uma nova recuperação.");
     botao.disabled = true;
     return;
@@ -50,11 +50,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // Valida a nova senha e envia a solicitação de redefinição
   form.addEventListener("submit", async (evento) => {
     evento.preventDefault();
+    if (botao.disabled) return;
     erro.hidden = true;
 
-    // Verifica se a senha possui a quantidade permitida de caracteres
-    if (senha.value.length < 8 || senha.value.length > 72) {
-      informarErro("A senha deve conter entre 8 e 72 caracteres.");
+    // Usa os mesmos limites do cadastro e do backend. Acentos e emojis
+    // ocupam mais bytes, por isso a contagem de caracteres sozinha não basta.
+    if (senha.value.length < 8 || senha.value.length > 50) {
+      informarErro("A senha deve conter entre 8 e 50 caracteres.");
+      return;
+    }
+
+    if (new TextEncoder().encode(senha.value).length > 72) {
+      informarErro("A senha ultrapassa o limite de tamanho permitido. Reduza os caracteres acentuados ou emojis.");
       return;
     }
 

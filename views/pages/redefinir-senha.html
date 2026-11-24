@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
 
-  <title>Redefinir senha | PsicomManager</title>
+  <title>Redefinir senha | EcoStock</title>
 
   <!-- Estilização da página -->
   <link rel="stylesheet" href="../../public/css/style.css">
@@ -120,18 +120,18 @@
         <div id="etapaFormulario">
 
           <h1 class="login-title">Redefinir senha</h1>
-          <p class="login-description">Crie uma nova senha de pelo menos 8 caracteres.</p>
+          <p class="login-description">Crie uma nova senha de 8 a 50 caracteres.</p>
 
           <!-- Campo da nova senha -->
           <div class="login-field">
             <label for="novaSenha">Nova senha</label>
-            <input id="novaSenha" type="password" name="novaSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Digite a nova senha" aria-describedby="erroSenha">
+            <input id="novaSenha" type="password" name="novaSenha" minlength="8" maxlength="50" required autocomplete="new-password" placeholder="Digite a nova senha" aria-describedby="erroSenha">
           </div>
 
           <!-- Confirmação da nova senha -->
           <div class="login-field">
             <label for="confirmarSenha">Confirme a nova senha</label>
-            <input id="confirmarSenha" type="password" name="confirmarSenha" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="Repita a nova senha">
+            <input id="confirmarSenha" type="password" name="confirmarSenha" minlength="8" maxlength="50" required autocomplete="new-password" placeholder="Repita a nova senha">
             <p id="erroSenha" class="login-error" role="alert" hidden></p>
           </div>
 

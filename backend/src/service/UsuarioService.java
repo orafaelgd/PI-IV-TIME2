@@ -63,12 +63,7 @@ public class UsuarioService {
         }
 
         // Validar e-mail
-        if (
-            email.length() > 150 ||
-            !email.matches(
-                "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
-            )
-        ) {
+        if (!ConfiguracaoEmail.emailValido(email)) {
             throw new IllegalArgumentException(
                 "Informe um e-mail válido."
             );

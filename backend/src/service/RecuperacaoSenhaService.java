@@ -2,11 +2,14 @@
 
 package service;
 
+import com.mongodb.client.ClientSession;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Sorts;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 import org.mindrot.jbcrypt.BCrypt;
 
@@ -18,28 +21,39 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Locale;
-import java.util.regex.Pattern;
 
 public class RecuperacaoSenhaService {
 
-    // Define o formato do e-mail e o prazo de validade do link de recuperação
-    private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    // Define o gerador dos tokens e o prazo de validade do link de recuperação
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final long PRAZO_MINUTOS = 20;
 
     // Coleções utilizadas no processo de recuperação de senha
+    private final MongoClient cliente;
     private final MongoCollection<Document> usuarios;
     private final MongoCollection<Document> sessoes;
     private final MongoCollection<Document> recuperacoes;
-    private final GmailEmailService gmail = new GmailEmailService();
+    private final GmailEmailService gmail;
 
     // Inicializa as coleções necessárias para consultar e atualizar os dados
-    public RecuperacaoSenhaService(MongoCollection<Document> usuarios,
+    public RecuperacaoSenhaService(MongoClient cliente,
+                                    MongoCollection<Document> usuarios,
                                     MongoCollection<Document> sessoes,
                                     MongoCollection<Document> recuperacoes) {
+        this(cliente, usuarios, sessoes, recuperacoes, new GmailEmailService());
+    }
+
+    // Permite testar o fluxo com um remetente simulado, sem enviar e-mails reais.
+    public RecuperacaoSenhaService(MongoClient cliente,
+                                    MongoCollection<Document> usuarios,
+                                    MongoCollection<Document> sessoes,
+                                    MongoCollection<Document> recuperacoes,
+                                    GmailEmailService gmail) {
+        this.cliente = cliente;
         this.usuarios = usuarios;
         this.sessoes = sessoes;
         this.recuperacoes = recuperacoes;
+        this.gmail = gmail;
     }
 
     // Verifica se o serviço de envio de e-mails está configurado
@@ -55,7 +69,7 @@ public class RecuperacaoSenhaService {
             throw new IllegalArgumentException("Informe um e-mail válido.");
         }
         String email = emailInformado.strip().toLowerCase(Locale.ROOT);
-        if (email.length() > 150 || !EMAIL.matcher(email).matches()) {
+        if (!ConfiguracaoEmail.emailValido(email)) {
             throw new IllegalArgumentException("Informe um e-mail válido.");
         }
         if (!configurado()) {
@@ -70,6 +84,7 @@ public class RecuperacaoSenhaService {
 
         // Impede novas solicitações para a mesma conta em um intervalo de 60 segundos
         ObjectId usuarioId = usuario.getObjectId("_id");
+        if (usuarioId == null) return;
         Date limiteFrequencia = Date.from(Instant.now().minusSeconds(60));
         Document recente = recuperacoes.find(Filters.and(
                 Filters.eq("usuarioId", usuarioId),
@@ -94,15 +109,16 @@ public class RecuperacaoSenhaService {
         recuperacoes.insertOne(pedido);
 
         // Monta o link de redefinição com o token gerado
-        String separador = variavel("APP_RESET_URL").contains("?") ? "&" : "?";
-        String link = variavel("APP_RESET_URL") + separador
+        String urlRedefinicao = gmail.urlRedefinicao();
+        String separador = urlRedefinicao.contains("?") ? "&" : "?";
+        String link = urlRedefinicao + separador
                 + "token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
 
         // Envia o e-mail e remove a solicitação caso ocorra alguma falha
         try {
             gmail.enviarRecuperacao(email, link);
         } catch (Exception erro) {
-            recuperacoes.deleteOne(Filters.eq("_id", pedido.getObjectId("_id")));
+            recuperacoes.deleteOne(Filters.eq("tokenHash", hash));
             throw erro;
         }
     }
@@ -112,47 +128,75 @@ public class RecuperacaoSenhaService {
 
         // Confere o formato do token e o tamanho permitido para a nova senha
         if (token == null || !token.matches("[A-Za-z0-9_-]{40,100}")) return false;
-        if (novaSenha == null || novaSenha.length() < 8 || novaSenha.length() > 72) {
-            throw new IllegalArgumentException("A senha deve conter entre 8 e 72 caracteres.");
+        if (novaSenha == null || novaSenha.length() < 8 || novaSenha.length() > 50
+                || novaSenha.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new IllegalArgumentException("A senha deve ter de 8 a 50 caracteres e no máximo 72 bytes.");
         }
 
         // Procura uma solicitação que ainda não foi utilizada e não está expirada
         String hash = hashToken(token);
-        Document pedido = recuperacoes.find(Filters.and(
-                Filters.eq("tokenHash", hash),
-                Filters.eq("utilizado", false),
-                Filters.gt("expiraEm", new Date())
-        )).first();
+        Document pedido = recuperacoes.find(filtroPedidoValido(hash)).first();
+        if (pedido == null) return false;
+
+        ObjectId usuarioId = pedido.getObjectId("usuarioId");
+        if (usuarioId == null) return false;
+        Document usuario = usuarios.find(Filters.eq("_id", usuarioId)).first();
+        if (usuario == null || Boolean.FALSE.equals(usuario.getBoolean("ativo"))) return false;
+
+        // Calcula o BCrypt uma única vez, depois da consulta inicial e fora
+        // da transação, que pode ser repetida pelo driver em caso de conflito.
+        String senhaHash = BCrypt.hashpw(novaSenha, BCrypt.gensalt(12));
+
+        // A reserva do link, a senha e as sessões são gravadas juntas. Se uma
+        // etapa falhar, withTransaction desfaz as alterações, inclusive o uso do link.
+        try (ClientSession sessao = cliente.startSession()) {
+            return sessao.withTransaction(() -> redefinirNaTransacao(sessao, hash, senhaHash));
+        }
+    }
+
+    private boolean redefinirNaTransacao(ClientSession sessao, String hash, String senhaHash) {
+        // Reconsulta dentro da transação: outro pedido pode ter usado ou
+        // invalidado o link enquanto o hash da nova senha era calculado.
+        Document pedido = recuperacoes.find(sessao, filtroPedidoValido(hash)).first();
         if (pedido == null) return false;
 
         ObjectId id = pedido.getObjectId("_id");
         ObjectId usuarioId = pedido.getObjectId("usuarioId");
-        Document usuario = usuarios.find(Filters.eq("_id", usuarioId)).first();
+        if (id == null || usuarioId == null) return false;
+
+        Document usuario = usuarios.find(sessao, Filters.eq("_id", usuarioId)).first();
         if (usuario == null || Boolean.FALSE.equals(usuario.getBoolean("ativo"))) return false;
 
-        // Criptografa a nova senha utilizando BCrypt
-        String senhaHash = BCrypt.hashpw(novaSenha, BCrypt.gensalt(12));
-
-        // Marca o token como utilizado para impedir que o mesmo link seja reutilizado
-        UpdateResult reservado = recuperacoes.updateOne(Filters.and(
+        UpdateResult reservado = recuperacoes.updateOne(sessao, Filters.and(
                 Filters.eq("_id", id),
                 Filters.eq("utilizado", false),
                 Filters.gt("expiraEm", new Date())
         ), new Document("$set", new Document("utilizado", true)));
         if (reservado.getModifiedCount() != 1) return false;
 
-        // Atualiza a senha e encerra as sessões anteriores da conta
-        usuarios.updateOne(Filters.eq("_id", usuarioId),
+        UpdateResult atualizado = usuarios.updateOne(sessao, Filters.and(
+                Filters.eq("_id", usuarioId), Filters.ne("ativo", false)),
                 new Document("$set", new Document("senhaHash", senhaHash)));
-        sessoes.deleteMany(Filters.eq("usuarioId", usuarioId));
+        if (atualizado.getMatchedCount() != 1 || atualizado.getModifiedCount() != 1) {
+            throw new IllegalStateException("Não foi possível atualizar a senha do usuário.");
+        }
+
+        sessoes.deleteMany(sessao, Filters.eq("usuarioId", usuarioId));
 
         // Invalida outras solicitações de recuperação ainda pendentes
-        recuperacoes.updateMany(Filters.and(
+        recuperacoes.updateMany(sessao, Filters.and(
                 Filters.eq("usuarioId", usuarioId),
                 Filters.eq("utilizado", false)
         ), new Document("$set", new Document("utilizado", true)));
 
         return true;
+    }
+
+    private static Bson filtroPedidoValido(String hash) {
+        return Filters.and(
+                Filters.eq("tokenHash", hash),
+                Filters.eq("utilizado", false),
+                Filters.gt("expiraEm", new Date()));
     }
 
     // Gera o hash SHA-256 do token para armazená-lo de forma segura
@@ -166,9 +210,4 @@ public class RecuperacaoSenhaService {
         }
     }
 
-    // Recupera os valores das variáveis de ambiente utilizadas pelo serviço
-    private static String variavel(String nome) {
-        String valor = System.getenv(nome);
-        return valor == null ? "" : valor.trim();
-    }
 }

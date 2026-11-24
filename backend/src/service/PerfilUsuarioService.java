@@ -93,12 +93,7 @@ public class PerfilUsuarioService {
                 .strip()
                 .toLowerCase(Locale.ROOT);
 
-            if (
-                valor.length() > 150 ||
-                !valor.matches(
-                    "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
-                )
-            ) {
+            if (!ConfiguracaoEmail.emailValido(valor)) {
                 throw new IllegalArgumentException(
                     "Informe um e-mail válido."
                 );
